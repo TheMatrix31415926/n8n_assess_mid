@@ -1,0 +1,667 @@
+{
+  "name": "assign1_mid_AR_AI_caller",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "ar-caller",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -16,
+        32
+      ],
+      "id": "64fc42f5-716f-44b7-8176-34dae0dcb632",
+      "name": "Webhook",
+      "webhookId": "f03882f7-b885-49ca-bc66-fbdd460f161b"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT * FROM ar_records WHERE status = 'pending';",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        192,
+        -144
+      ],
+      "id": "32d07b8d-f385-4571-ac8f-64e9c0203fca",
+      "name": "Execute a SQL query",
+      "credentials": {
+        "postgres": {
+          "id": "Pz5LiQSqb8EQE2AD",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Normalize and enrich each record\nconst items = $input.all();\n\nreturn items.map(item => {\n  const record = item.json;\n  \n  // Normalize phone number (strip spaces, ensure + prefix)\n  let phone = (record.phone || '').replace(/\\s+/g, '');\n  if (!phone.startsWith('+')) phone = '+' + phone;\n  \n  // Normalize email to lowercase\n  const email = (record.email || '').toLowerCase().trim();\n  \n  // Format amount to 2 decimal places string\n  const amount = parseFloat(record.amount || 0).toFixed(2);\n  \n  // Flag overdue\n  const dueDate = new Date(record.due_date);\n  const today = new Date();\n  const isOverdue = dueDate < today;\n  \n  return {\n    json: {\n      ...record,\n      phone_normalized: phone,\n      email_normalized: email,\n      amount_display: `$${amount}`,\n      is_overdue: isOverdue,\n      overdue_days: isOverdue ? Math.floor((today - dueDate) / (1000 * 60 * 60 * 24)) : 0,\n      source_event: $('Webhook').first().json.event_id\n    }\n  };\n});"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        416,
+        -144
+      ],
+      "id": "beeb4b75-fc74-4acd-9c73-d32fd73beef2",
+      "name": "Code - Transform Records"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        640,
+        16
+      ],
+      "id": "7e97c211-c8b1-4d24-974d-d2fbf39acfef",
+      "name": "Merge"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Validate required fields before any irreversible action\nconst items = $input.all();\nconst validItems = [];\nconst invalidItems = [];\n\nfor (const item of items) {\n  const d = item.json;\n  \n  // Skip items that are just the webhook payload (no invoice_number)\n  if (!d.invoice_number) continue;\n  \n  const missing = [];\n  if (!d.customer_name) missing.push('customer_name');\n  if (!d.phone_normalized) missing.push('phone');\n  if (!d.email_normalized) missing.push('email');\n  if (!d.amount) missing.push('amount');\n  if (!d.invoice_number) missing.push('invoice_number');\n  \n  if (missing.length > 0) {\n    invalidItems.push({\n      json: { ...d, validation_status: 'INVALID', missing_fields: missing }\n    });\n  } else {\n    validItems.push({\n      json: { ...d, validation_status: 'VALID' }\n    });\n  }\n}\n\n// Return only valid items downstream\n// Invalid ones are logged (you can add a branch later)\nif (validItems.length === 0) {\n  throw new Error('No valid records found to process');\n}\n\nreturn validItems;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        848,
+        16
+      ],
+      "id": "35656b28-8506-4f9b-af51-bedd1ada6bad",
+      "name": "Code - Clean Call Data"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "2809fc58-60d9-43b4-b453-0900db2fcdaf",
+              "leftValue": "={{ $json.json.Status }}",
+              "rightValue": "401",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        1264,
+        16
+      ],
+      "id": "6089a3ff-dd1a-43ce-9b58-964fd713a689",
+      "name": "IF - Cookie Valid?"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Simulate getting a fresh session cookie from login\nconst originalData = $('Code - Clean Call Data').first().json;\n\nreturn [{\n  json: {\n    ...originalData,\n    session_cookie: 'ASP.NET_SessionId=fresh-dummy-cookie-999',\n    login_status: 'success',\n    login_timestamp: new Date().toISOString()\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1472,
+        112
+      ],
+      "id": "09547619-bb5b-4e50-b718-0902ffd33a73",
+      "name": "Code in JavaScript3"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://httpbin.org/post",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Cookie",
+              "value": "test-session-cookie-001"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"CustomerID\": { \"value\": \"{{ $json.customer_name }}\" },\n  \"ReferenceNbr\": { \"value\": \"{{ $json.invoice_number }}\" },\n  \"Amount\": { \"value\": \"{{ $json.amount }}\" },\n  \"Status\": { \"value\": \"Open\" }\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        1072,
+        16
+      ],
+      "id": "d52c7fdb-65e1-42ca-854a-96b01a31816e",
+      "name": "Acu - Invoice (Hard Cookie)(dummy)"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "httpbin.org/post",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "{\n  \"name\": \"dummy_admin\",\n  \"password\": \"dummy_password123\",\n  \"company\": \"DemoCompany\"\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        1536,
+        -112
+      ],
+      "id": "58018344-0766-408a-8b72-e741affa8582",
+      "name": "Acu - Login (if Hard Cookie Fails)(dummy)"
+    },
+    {
+      "parameters": {
+        "schema": {
+          "__rl": true,
+          "value": "public",
+          "mode": "list",
+          "cachedResultName": "public"
+        },
+        "table": {
+          "__rl": true,
+          "value": "ar_workflow_log",
+          "mode": "list",
+          "cachedResultName": "ar_workflow_log"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "id": "={{ $json.id }}",
+            "event_id": "={{ $json.event_id }}",
+            "action": "invoice_push",
+            "result": "success",
+            "message": "=Invoice {{ $json.invoice_number }} pushed to Acumatica",
+            "created_at": "={{ $json.created_at }}"
+          },
+          "matchingColumns": [
+            "id"
+          ],
+          "schema": [
+            {
+              "id": "id",
+              "displayName": "id",
+              "required": false,
+              "defaultMatch": true,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "event_id",
+              "displayName": "event_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "action",
+              "displayName": "action",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "result",
+              "displayName": "result",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "message",
+              "displayName": "message",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "created_at",
+              "displayName": "created_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "dateTime",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        1680,
+        112
+      ],
+      "id": "967bcf1a-ebde-4c48-ae64-00093d708bc9",
+      "name": "Insert rows in a table",
+      "credentials": {
+        "postgres": {
+          "id": "Pz5LiQSqb8EQE2AD",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://httpbin.org/post",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"Status\": { \"value\": \"Processed\" },\n  \"ProcessedDate\": { \"value\": \"{{ $now.toISO() }}\" }\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        1888,
+        112
+      ],
+      "id": "5703f517-d9f3-4bf8-926c-7eed729e4c31",
+      "name": "Acu - Invoice (Hard Cookie)1"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "a05f8585-0b1e-4f25-8083-5360460a52d0",
+              "leftValue": "={{ $json.body.status }}",
+              "rightValue": "completed",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        192,
+        384
+      ],
+      "id": "5ee3e138-71fc-4135-8cd3-56071ea9670d",
+      "name": "IF - AR Portal"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Format data for AR Portal HTTP call\nconst item = $input.first();\nconst d = item.json;\n\nreturn [{\n  json: {\n    customer_id: d.event_id,\n    invoice_ref: d.invoice_number || 'N/A',\n    amount_due: d.amount || 0,\n    contact_phone: d.phone_normalized || d.phone,\n    portal_action: 'send_reminder',\n    timestamp: new Date().toISOString()\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        400,
+        288
+      ],
+      "id": "2e097cb8-0eb7-4658-acc9-77e873caaeed",
+      "name": "Code in JavaScript1"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://httpbin.org/post",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ $json }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        608,
+        288
+      ],
+      "id": "cbfa2998-63f4-4fd6-9b58-1edc85f09fac",
+      "name": "HTTP Request"
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "10JP9IjFEa9Twde1cszIfu6YBS9iYc7DQaMA7YEXIHT0",
+          "mode": "list",
+          "cachedResultName": "AR Caller Workflow Log",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/10JP9IjFEa9Twde1cszIfu6YBS9iYc7DQaMA7YEXIHT0/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Sheet1",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/10JP9IjFEa9Twde1cszIfu6YBS9iYc7DQaMA7YEXIHT0/edit#gid=0"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Event ID": "={{ $('Code in JavaScript3').item.json.id }}",
+            "Customer": "={{ $('Code in JavaScript3').item.json.customer_name }}",
+            "Invoice": "={{ $('Code in JavaScript3').item.json.invoice_number }}",
+            "Amount": "={{ $('Code in JavaScript3').item.json.amount }}",
+            "Status": "={{ $('Acu - Invoice (Hard Cookie)1').item.json.json.Status }}",
+            "Timestamp": "={{ $now }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "Event ID",
+              "displayName": "Event ID",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Customer",
+              "displayName": "Customer",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Invoice",
+              "displayName": "Invoice",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Amount",
+              "displayName": "Amount",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Status",
+              "displayName": "Status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Timestamp",
+              "displayName": "Timestamp",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        2304,
+        112
+      ],
+      "id": "81edbf59-2505-4eb8-91c2-4a5b3e0548bc",
+      "name": "Append row in sheet",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "p29c8vZBT44DvNDB",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT COUNT(*) as cnt FROM ar_workflow_log\nWHERE event_id = '{{ $json.event_id }}'\nAND result = 'success';",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        2096,
+        112
+      ],
+      "id": "8bfc9b6f-32f6-4fbd-b90e-08378639e819",
+      "name": "Execute a SQL query1",
+      "alwaysOutputData": true,
+      "credentials": {
+        "postgres": {
+          "id": "Pz5LiQSqb8EQE2AD",
+          "name": "Postgres account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Execute a SQL query",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 1
+          },
+          {
+            "node": "IF - AR Portal",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute a SQL query": {
+      "main": [
+        [
+          {
+            "node": "Code - Transform Records",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code - Transform Records": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge": {
+      "main": [
+        [
+          {
+            "node": "Code - Clean Call Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code - Clean Call Data": {
+      "main": [
+        [
+          {
+            "node": "Acu - Invoice (Hard Cookie)(dummy)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF - Cookie Valid?": {
+      "main": [
+        [
+          {
+            "node": "Acu - Login (if Hard Cookie Fails)(dummy)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Code in JavaScript3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Acu - Invoice (Hard Cookie)(dummy)": {
+      "main": [
+        [
+          {
+            "node": "IF - Cookie Valid?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript3": {
+      "main": [
+        [
+          {
+            "node": "Insert rows in a table",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Insert rows in a table": {
+      "main": [
+        [
+          {
+            "node": "Acu - Invoice (Hard Cookie)1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF - AR Portal": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript1": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Acu - Invoice (Hard Cookie)1": {
+      "main": [
+        [
+          {
+            "node": "Execute a SQL query1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute a SQL query1": {
+      "main": [
+        [
+          {
+            "node": "Append row in sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "ee5b1d26-1b1a-4d76-8147-3b1280946329",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "dfa9bd419da97e8a72d6069acb67e95575c89baa71302d0781a7331301986176"
+  },
+  "id": "KuibXCA5hTC7ze36",
+  "tags": []
+}
