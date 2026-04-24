@@ -1,0 +1,488 @@
+{
+  "name": "n8n_mid_4_Candidate Qualification Agent",
+  "nodes": [
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "id": "43fa02b8-9652-483a-acd9-0fff602f461d",
+      "name": "When clicking ‘Execute workflow’"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT \n    id,\n    record_id,\n    profile_url,\n    status,\n    created_at\nFROM candidates\nORDER BY id;",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        208,
+        0
+      ],
+      "id": "dd36d064-58ee-4902-8bb3-4b8338606f48",
+      "name": "Execute a SQL query",
+      "credentials": {
+        "postgres": {
+          "id": "Pz5LiQSqb8EQE2AD",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "75175460-8252-4d36-b537-ffc356cb835f",
+              "leftValue": "={{ $json.profile_url }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        416,
+        0
+      ],
+      "id": "a1f37678-8e8d-4916-84fa-ea7d0971279a",
+      "name": "If"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Normalize LinkedIn URLs\nconst items = $input.all();\n\nconst normalizedItems = items.map(item => {\n  let url = item.json.profile_url;\n  \n  // Remove trailing slashes\n  url = url.replace(/\\/+$/, '');\n  \n  // Ensure HTTPS\n  if (url.startsWith('http://')) {\n    url = url.replace('http://', 'https://');\n  }\n  \n  // Extract username/slug\n  const match = url.match(/linkedin\\.com\\/in\\/([^\\/\\?]+)/);\n  const username = match ? match[1] : null;\n  \n  return {\n    json: {\n      ...item.json,\n      normalized_url: url,\n      linkedin_username: username\n    }\n  };\n});\n\nreturn normalizedItems;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        624,
+        -96
+      ],
+      "id": "2d0db830-dc5f-405f-bbc8-48d6f802e125",
+      "name": "Code in JavaScript"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "59e35d40-fa34-40dc-8966-18e0b1a5d1f5",
+              "leftValue": "={{ $json.status }}",
+              "rightValue": "new",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        880,
+        -96
+      ],
+      "id": "19d37a06-23e3-4d76-b5c6-c2fc2effb259",
+      "name": "If1"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        1312,
+        -96
+      ],
+      "id": "0c401ff6-6f26-4c81-9ecc-d63072c1643c",
+      "name": "Loop Over Items"
+    },
+    {
+      "parameters": {
+        "sendHeaders": true,
+        "specifyHeaders": "json",
+        "jsonHeaders": "{\n  \"Content-Type\": \"application/json\"\n}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"profileScraperMode\": \"Profile details no email ($4 per 1k)\",\n  \"queries\": [\n    \"{{ $json.normalized_url }}\"\n  ]\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        1488,
+        16
+      ],
+      "id": "b850367b-4780-4e7f-ad42-20d3915e911f",
+      "name": "HTTP Request"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "54832b51-0f95-411e-aaec-3b08d9f508cc",
+              "leftValue": "={{ $json.qualified }}",
+              "rightValue": "false",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        2224,
+        32
+      ],
+      "id": "1fb91dd4-0510-4a3a-96ce-10650dd89a67",
+      "name": "If2"
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "132Tm1sCR8O3GzW2CN9m8xDbfZfrYuB2T19sMCtdbx_s",
+          "mode": "list",
+          "cachedResultName": "resumeScreener",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/132Tm1sCR8O3GzW2CN9m8xDbfZfrYuB2T19sMCtdbx_s/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Sheet1",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/132Tm1sCR8O3GzW2CN9m8xDbfZfrYuB2T19sMCtdbx_s/edit#gid=0"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "record_id": "={{ $('If1').item.json.id }}",
+            "full_name": "={{ $json.firstName }}{{ $json.lastName }}",
+            "profile_url": "={{ $json.linkedinUrl }}",
+            "job_title": "={{ $json.currentPosition[0].position }}",
+            "company": "={{ $json.currentPosition[0].companyName }}",
+            "score": "={{ $json.qualification_score }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "record_id",
+              "displayName": "record_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "full_name",
+              "displayName": "full_name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "job_title",
+              "displayName": "job_title",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "company",
+              "displayName": "company",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "profile_url",
+              "displayName": "profile_url",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "score",
+              "displayName": "score",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        2480,
+        -64
+      ],
+      "id": "f28702bc-ca4c-42b3-87b5-e6dcac6169b4",
+      "name": "Append row in sheet",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "p29c8vZBT44DvNDB",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE candidates \nSET status = 'qualified',\n    processed_at = NOW()\nWHERE record_id = '{{ $json.record_id }}';",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        2704,
+        0
+      ],
+      "id": "08992a24-87f1-4728-a2b0-5dd2d9d6bdaf",
+      "name": "Execute a SQL query2",
+      "credentials": {
+        "postgres": {
+          "id": "Pz5LiQSqb8EQE2AD",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Get the root object from the input\nconst rootData = $input.first().json;\n\n// Access the profiles array specifically\nconst profiles = rootData.profiles;\n\n// Validate that profiles exist\nif (!profiles || profiles.length === 0) {\n  return {\n    json: {\n      ...rootData,\n      enriched_data: null,\n      scrape_failed: true\n    }\n  };\n}\n\n// Select the first profile\nconst profile = profiles[0];\n\n// Return the structured data\nreturn {\n  json: {\n    ...rootData,\n    enriched_data: {\n      full_name: `${profile.firstName || ''} ${profile.lastName || ''}`.trim() || \"Unknown\",\n      first_name: profile.firstName || \"Unknown\",\n      last_name: profile.lastName || \"Unknown\",\n      public_identifier: profile.publicIdentifier || null,\n      linkedin_url: profile.linkedinUrl || null,\n      // Add other fields as needed using 'profile.fieldName'\n    },\n    scrape_failed: false,\n    scraped_at: new Date().toISOString()\n  }\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1728,
+        32
+      ],
+      "id": "ed1dc237-cb0f-4405-8bab-f24ce1e5fa0b",
+      "name": "Extract Profile"
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all();\n\nconst qualifiedItems = items.map(item => {\n  const data = item.json;\n  \n  // 1. Handle explicit scrape failures\n  if (data.scrape_failed || !data.enriched_data) {\n    return {\n      json: {\n        ...data,\n        qualified: false,\n        qualification_reason: \"LinkedIn scrape failed or no data available\",\n        qualification_score: 0\n      }\n    };\n  }\n  \n  const enriched = data.enriched_data;\n  \n  // 2. Safe property access with fallbacks\n  const jobTitle = (enriched.job_title || '').toLowerCase();\n  const experienceCount = enriched.experience_count || 0;\n  const connections = enriched.connections || 0;\n\n  // 3. Qualification criteria\n  const hasRelevantTitle = /engineer|developer|manager|director/.test(jobTitle);\n  const hasMinExperience = experienceCount >= 2;\n  const hasMinConnections = connections >= 100;\n  \n  const isQualified = hasRelevantTitle && hasMinExperience && hasMinConnections;\n  \n  // 4. Calculate score\n  let score = 0;\n  if (hasRelevantTitle) score += 40;\n  if (hasMinExperience) score += 30;\n  if (hasMinConnections) score += 30;\n  \n  return {\n    json: {\n      ...data,\n      qualification_score: score,\n      qualified: isQualified,\n      qualification_reason: isQualified \n        ? `Meets criteria: ${enriched.job_title} with ${experienceCount} experiences`\n        : \"Does not meet minimum requirements\"\n    }\n  };\n});\n\nreturn qualifiedItems;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1984,
+        16
+      ],
+      "id": "7ebd1d28-3456-43bf-9db3-51c7dc173cb5",
+      "name": "Qualification criteria"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "When clicking ‘Execute workflow’": {
+      "main": [
+        [
+          {
+            "node": "Execute a SQL query",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute a SQL query": {
+      "main": [
+        [
+          {
+            "node": "If",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript": {
+      "main": [
+        [
+          {
+            "node": "If1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If1": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Loop Over Items": {
+      "main": [
+        [],
+        [
+          {
+            "node": "HTTP Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request": {
+      "main": [
+        [
+          {
+            "node": "Extract Profile",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If2": {
+      "main": [
+        [
+          {
+            "node": "Append row in sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Append row in sheet": {
+      "main": [
+        [
+          {
+            "node": "Execute a SQL query2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute a SQL query2": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Profile": {
+      "main": [
+        [
+          {
+            "node": "Qualification criteria",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Qualification criteria": {
+      "main": [
+        [
+          {
+            "node": "If2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "159c1205-78a2-4905-8b94-096429979d0d",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "dfa9bd419da97e8a72d6069acb67e95575c89baa71302d0781a7331301986176"
+  },
+  "id": "cNUncKCGbiPb56I4",
+  "tags": []
+}
