@@ -1,0 +1,416 @@
+{
+  "name": "n8n_mid_10",
+  "nodes": [
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "id": "8b6a23d8-3194-4a97-a59f-318b4338f4c6",
+      "name": "When clicking ‘Execute workflow’"
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "1utOs9ShD9WLcYPZYq84k9cNXpkv6_uue6QXkbDKyzKo",
+          "mode": "list",
+          "cachedResultName": "Competition Recommendations",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1utOs9ShD9WLcYPZYq84k9cNXpkv6_uue6QXkbDKyzKo/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "competitor Insights",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1utOs9ShD9WLcYPZYq84k9cNXpkv6_uue6QXkbDKyzKo/edit#gid=0"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        208,
+        0
+      ],
+      "id": "5db3aba6-8a62-463b-a3b6-3f22c7d298fe",
+      "name": "Get row(s) in sheet",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "p29c8vZBT44DvNDB",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        416,
+        0
+      ],
+      "id": "57a92463-c153-4e5c-923e-63190cf228a1",
+      "name": "Loop Over Items"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=You are a senior marketing strategist.\n\nAnalyze this competitor insight and generate 3 specific, \nactionable marketing recommendations.\n\nInsight: {{ $json.Insight }}\nTopic: {{ $json.Topic }}\nEngagement Level: {{ $json.Engagement_Level }}\nSummary: {{ $json.Summary }}\n\nReturn ONLY a raw JSON array. No markdown, no backticks, \nno explanation. Start with [ and end with ]:\n\n[\n  {\n    \"title\": \"Specific action title here\",\n    \"rationale\": \"Why this will work based on the insight\",\n    \"category\": \"Content|SEO|Paid|Social|Email|Brand\",\n    \"priority\": \"High|Medium|Low\",\n    \"ice_score\": 75,\n    \"owner_role\": \"Content Manager|Social Media|CMO|Designer\",\n    \"due_days\": 14,\n    \"source_insight\": \"{{ $json.Topic }}\"\n  }\n]",
+        "options": {
+          "systemMessage": "You are a marketing strategist AI.\nAlways respond with ONLY a valid raw JSON array.\nNever add markdown, backticks, or extra text.\nAlways start with [ and end with ]"
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        704,
+        208
+      ],
+      "id": "2659e091-58c4-4f53-98ce-e7ac69219f7f",
+      "name": "AI Agent"
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "value": "gpt-4o-mini",
+          "mode": "list",
+          "cachedResultName": "gpt-4o-mini"
+        },
+        "builtInTools": {},
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.3,
+      "position": [
+        576,
+        309.5
+      ],
+      "id": "f427901f-52ea-4dfe-8151-52c04e56100a",
+      "name": "OpenAI Chat Model",
+      "credentials": {
+        "openAiApi": {
+          "id": "X6yz5KIllfL8AWsR",
+          "name": "OpenAI account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "sessionIdType": "customKey",
+        "sessionKey": "={{ $json.Topic }}"
+      },
+      "type": "@n8n/n8n-nodes-langchain.memoryBufferWindow",
+      "typeVersion": 1.3,
+      "position": [
+        752,
+        400
+      ],
+      "id": "bbde2f29-a884-41a1-bb7c-4a2f5139c64d",
+      "name": "Simple Memory"
+    },
+    {
+      "parameters": {
+        "jsCode": "// ICE Score Calculator Tool\n// Impact x Confidence / Effort\nconst impact = $input.first().json.impact || 7;\nconst confidence = $input.first().json.confidence || 7;\nconst effort = $input.first().json.effort || 5;\n\nconst iceScore = Math.round(\n  (impact * confidence) / effort\n);\n\nreturn [{ json: { ice_score: iceScore } }];"
+      },
+      "type": "@n8n/n8n-nodes-langchain.toolCode",
+      "typeVersion": 1.3,
+      "position": [
+        864,
+        416
+      ],
+      "id": "cf2cf534-414b-476a-b3b1-f45d0e3f107f",
+      "name": "Code Tool"
+    },
+    {
+      "parameters": {
+        "jsCode": "const item = $input.first();\nconst original = item.json;\n\n// Get AI output\nlet rawOutput = item.json.output || '';\n\nlet recommendations = [];\n\ntry {\n  // Clean the output\n  if (typeof rawOutput === 'string') {\n    // Remove markdown if present\n    rawOutput = rawOutput\n      .replace(/```json/gi, '')\n      .replace(/```/g, '')\n      .trim();\n\n    // Find the JSON array\n    const start = rawOutput.indexOf('[');\n    const end = rawOutput.lastIndexOf(']');\n\n    if (start !== -1 && end !== -1) {\n      const jsonStr = rawOutput.substring(start, end + 1);\n      recommendations = JSON.parse(jsonStr);\n    }\n  } else if (Array.isArray(rawOutput)) {\n    recommendations = rawOutput;\n  } else if (rawOutput.recommendations) {\n    recommendations = rawOutput.recommendations;\n  }\n} catch(e) {\n  // Return error info safely\n  return [{\n    json: {\n      error: true,\n      message: 'AI output could not be parsed: ' + e.message,\n      raw: JSON.stringify(rawOutput).substring(0, 300)\n    }\n  }];\n}\n\n// Validate and clean each recommendation\nconst valid = [];\nconst allowedCategories = [\n  'Content', 'SEO', 'Paid', 'Social', 'Email', 'Brand'\n];\nconst allowedPriorities = ['High', 'Medium', 'Low'];\n\nfor (const rec of recommendations) {\n\n  // Skip incomplete records\n  if (!rec.title || !rec.rationale) continue;\n\n  // Normalize category\n  let category = (rec.category || 'Content').trim();\n  if (!allowedCategories.includes(category)) {\n    category = 'Content';\n  }\n\n  // Normalize priority\n  let priority = (rec.priority || 'Medium').trim();\n  if (!allowedPriorities.includes(priority)) {\n    priority = 'Medium';\n  }\n\n  // Normalize ICE score (must be 1-100)\n  let iceScore = Number(rec.ice_score) || 50;\n  if (iceScore > 100) iceScore = 100;\n  if (iceScore < 1) iceScore = 1;\n\n  // Normalize due days\n  let dueDays = Number(rec.due_days) || 14;\n  if (dueDays < 1) dueDays = 7;\n  if (dueDays > 90) dueDays = 90;\n\n  valid.push({\n    json: {\n      title: rec.title.substring(0, 150),\n      rationale: (rec.rationale || '').substring(0, 300),\n      category: category,\n      priority: priority,\n      ice_score: iceScore,\n      owner_role: rec.owner_role || 'Marketing Manager',\n      due_days: dueDays,\n      source_insight: rec.source_insight || \n        original.Topic || 'Unknown',\n      generated_at: new Date().toISOString()\n    }\n  });\n}\n\n// Safety check — don't write garbage to sheet\nif (valid.length === 0) {\n  return [{\n    json: {\n      error: true,\n      message: 'No valid recommendations after validation',\n      raw: JSON.stringify(rawOutput).substring(0, 300)\n    }\n  }];\n}\n\nreturn valid;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1056,
+        208
+      ],
+      "id": "0c4195f9-884d-4c70-904a-92944b535ccc",
+      "name": "Code in JavaScript"
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "1utOs9ShD9WLcYPZYq84k9cNXpkv6_uue6QXkbDKyzKo",
+          "mode": "list",
+          "cachedResultName": "Competition Recommendations",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1utOs9ShD9WLcYPZYq84k9cNXpkv6_uue6QXkbDKyzKo/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": 1970842469,
+          "mode": "list",
+          "cachedResultName": "Recommendation Tracker",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1utOs9ShD9WLcYPZYq84k9cNXpkv6_uue6QXkbDKyzKo/edit#gid=1970842469"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "title": "={{ $json.title }}",
+            "rationale": "={{ $json.rationale }}",
+            "category": "={{ $json.category }}",
+            "priority": "={{ $json.priority }}",
+            "ice_score": "={{ $json.ice_score }}",
+            "owner_role": "={{ $json.owner_role }}",
+            "due_days": "={{ $json.due_days }}",
+            "source_insight": "={{ $json.source_insight }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "title",
+              "displayName": "title",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "rationale",
+              "displayName": "rationale",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "category",
+              "displayName": "category",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "priority",
+              "displayName": "priority",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "ice_score",
+              "displayName": "ice_score",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "owner_role",
+              "displayName": "owner_role",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "due_days",
+              "displayName": "due_days",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "source_insight",
+              "displayName": "source_insight",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        1520,
+        240
+      ],
+      "id": "8f7743ce-c760-4903-911a-931008cb36f8",
+      "name": "Append row in sheet",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "p29c8vZBT44DvNDB",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO recommendation_log\n(run_id, insight_topic, recommendations_generated, status)\nVALUES (\n  'RUN-{{ $now.toMillis() }}',\n  '{{ $json.source_insight }}',\n  1,\n  'success'\n);",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        1776,
+        336
+      ],
+      "id": "a8bed534-59e3-4612-9a55-a9123e713a0e",
+      "name": "Execute a SQL query",
+      "credentials": {
+        "postgres": {
+          "id": "Pz5LiQSqb8EQE2AD",
+          "name": "Postgres account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "When clicking ‘Execute workflow’": {
+      "main": [
+        [
+          {
+            "node": "Get row(s) in sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get row(s) in sheet": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Loop Over Items": {
+      "main": [
+        [],
+        [
+          {
+            "node": "AI Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Agent": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Simple Memory": {
+      "ai_memory": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_memory",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code Tool": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript": {
+      "main": [
+        [
+          {
+            "node": "Append row in sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Append row in sheet": {
+      "main": [
+        [
+          {
+            "node": "Execute a SQL query",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute a SQL query": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "add369fb-db3b-4a5b-aa76-8ae21c7fb708",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "dfa9bd419da97e8a72d6069acb67e95575c89baa71302d0781a7331301986176"
+  },
+  "id": "35YvrQqUNZbmSb6s",
+  "tags": []
+}
