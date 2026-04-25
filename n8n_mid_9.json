@@ -1,0 +1,653 @@
+{
+  "name": "n8n_mid_9",
+  "nodes": [
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "id": "9e192929-2c20-4823-9bda-e721411990d8",
+      "name": "When clicking ‘Execute workflow’"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT * FROM competition_posts\nWHERE platform = 'instagram'\nAND status = 'new'\nAND processed = FALSE\nORDER BY created_at ASC;",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        480,
+        -112
+      ],
+      "id": "434ab73c-403e-4fc7-81d5-12ca5e790397",
+      "name": "Execute a SQL query",
+      "credentials": {
+        "postgres": {
+          "id": "Pz5LiQSqb8EQE2AD",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all();\nconst valid = [];\n\nfor (const item of items) {\n  const d = item.json;\n  const missing = [];\n\n  if (!d.message_id) missing.push('message_id');\n  if (!d.username) missing.push('username');\n  if (!d.profile_url) missing.push('profile_url');\n\n  if (missing.length > 0) continue; // skip invalid\n\n  // Normalize URL\n  let url = (d.profile_url || '').trim();\n  if (!url.startsWith('https://')) url = 'https://' + url;\n  if (!url.endsWith('/')) url = url + '/';\n\n  valid.push({\n    json: { ...d, profile_url: url, validation_status: 'VALID' }\n  });\n}\n\nif (valid.length === 0) {\n  throw new Error('No valid Instagram records found');\n}\n\nreturn valid;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        688,
+        -112
+      ],
+      "id": "35ab9fb0-5072-4565-b926-b9e0ca4fc5dd",
+      "name": "Validate Instagram Records"
+    },
+    {
+      "parameters": {
+        "actorId": {
+          "__rl": true,
+          "value": "bGApZ3CtTxA9fv2rl",
+          "mode": "list",
+          "cachedResultName": "🔥 Instagram Profile Scraper API (coderx/instagram-profile-scraper-api)",
+          "cachedResultUrl": "https://console.apify.com/actors/bGApZ3CtTxA9fv2rl/input"
+        },
+        "customBody": "={\n  \"usernames\": [\"{{$json.profile_url}}\"],\n  \"resultsLimit\": 10\n} "
+      },
+      "type": "@apify/n8n-nodes-apify.apify",
+      "typeVersion": 1,
+      "position": [
+        912,
+        -112
+      ],
+      "id": "82d26197-d56f-4248-a3dc-8a792556da8a",
+      "name": "Run an Actor",
+      "credentials": {
+        "apifyApi": {
+          "id": "qB67GNW8iVG12JSd",
+          "name": "Apify account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "Datasets",
+        "datasetId": "={{ $json.defaultDatasetId }}",
+        "options": {}
+      },
+      "type": "@apify/n8n-nodes-apify.apify",
+      "typeVersion": 1,
+      "position": [
+        1120,
+        -112
+      ],
+      "id": "e3ef461a-c609-47c1-9322-583d0ba4152a",
+      "name": "Get dataset items",
+      "credentials": {
+        "apifyApi": {
+          "id": "qB67GNW8iVG12JSd",
+          "name": "Apify account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all();\n\n// Get original record from Postgres node\nconst original = $('Postgres').first().json;\n\nreturn items.map(item => {\n  const d = item.json;\n\n  // Validate post data\n  if (!d.url && !d.shortCode) {\n    return {\n      json: {\n        error: true,\n        message: 'Invalid post data',\n        message_id: original.message_id\n      }\n    };\n  }\n\n  // Normalize post URL\n  let postUrl = d.url || \n    `https://www.instagram.com/p/${d.shortCode}/`;\n  if (!postUrl.startsWith('https://')) {\n    postUrl = 'https://' + postUrl;\n  }\n\n  // Extract metrics\n  const likes = d.likesCount || 0;\n  const comments = d.commentsCount || 0;\n  const followers = d.ownerFollowersCount || 1;\n\n  // Engagement rate calculation\n  const engagementRate = followers > 0\n    ? (((likes + comments) / followers) * 100).toFixed(2)\n    : 0;\n\n  // Score based on engagement\n  let score = 0;\n  if (engagementRate > 5) score = 100;\n  else if (engagementRate > 3) score = 80;\n  else if (engagementRate > 1) score = 60;\n  else score = 30;\n\n  // Normalize caption\n  const caption = (d.caption || '')\n    .substring(0, 200)\n    .replace(/\\n/g, ' ')\n    .trim();\n\n  return {\n    json: {\n      message_id: original.message_id || 'MSG-001',\n      username: d.ownerUsername || original.username,\n      post_url: postUrl,\n      caption: caption,\n      likes: likes,\n      comments: comments,\n      post_type: d.type || 'Image',\n      engagement_rate: engagementRate,\n      engagement_score: score,\n      platform: 'instagram',\n      timestamp: new Date().toISOString()\n    }\n  };\n});"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1328,
+        -112
+      ],
+      "id": "c99f1b6c-9000-4778-8b8d-430d7a73e8ae",
+      "name": "Code in JavaScript"
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "1LaQklQJNW8uV9DGB3G4eEv7ooN2ueXJ-rzI8HhwO5Fo",
+          "mode": "list",
+          "cachedResultName": "Competition Post Analysis",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1LaQklQJNW8uV9DGB3G4eEv7ooN2ueXJ-rzI8HhwO5Fo/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": 690996815,
+          "mode": "list",
+          "cachedResultName": "Instagram Post Analysis",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1LaQklQJNW8uV9DGB3G4eEv7ooN2ueXJ-rzI8HhwO5Fo/edit#gid=690996815"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "message_id",
+              "displayName": "message_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "username",
+              "displayName": "username",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "post_url",
+              "displayName": "post_url",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "caption",
+              "displayName": "caption",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "likes",
+              "displayName": "likes",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "comments",
+              "displayName": "comments",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "post_type",
+              "displayName": "post_type",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "engagement_score",
+              "displayName": "engagement_score",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "timestamp",
+              "displayName": "timestamp",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        1536,
+        -112
+      ],
+      "id": "d5c01a90-9b0e-4ea7-8ef1-4c72ec287498",
+      "name": "Append row in sheet",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "p29c8vZBT44DvNDB",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE competition_posts\nSET status = 'processed', processed = TRUE\nWHERE message_id = '{{ $json.message_id }}';\n\n\n\n\nINSERT INTO competition_posts_log\n(message_id, username, platform, action, result, message)\nVALUES (\n  '{{ $json.message_id }}',\n  '{{ $json.username }}',\n  'instagram',\n  'post_analysis',\n  'success',\n  'Engagement score: {{ $json.engagement_score }}'\n);",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        1744,
+        -112
+      ],
+      "id": "7ed72762-7827-44d6-aa4a-99e445a6e780",
+      "name": "Execute a SQL query1",
+      "credentials": {
+        "postgres": {
+          "id": "Pz5LiQSqb8EQE2AD",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT * FROM competition_posts\nWHERE platform = 'linkedin'\nAND status = 'new'\nAND processed = FALSE\nORDER BY created_at ASC;",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        464,
+        128
+      ],
+      "id": "8701bd76-ddc2-4821-bf6a-1bbfb61451f7",
+      "name": "Execute a SQL query2",
+      "credentials": {
+        "postgres": {
+          "id": "Pz5LiQSqb8EQE2AD",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all();\nconst valid = [];\n\nfor (const item of items) {\n  const d = item.json;\n  const missing = [];\n\n  if (!d.message_id) missing.push('message_id');\n  if (!d.profile_url) missing.push('profile_url');\n\n  if (missing.length > 0) continue;\n\n  let url = (d.profile_url || '').trim();\n  if (!url.startsWith('https://')) url = 'https://' + url;\n  if (!url.endsWith('/')) url = url + '/';\n\n  valid.push({\n    json: { ...d, profile_url: url, validation_status: 'VALID' }\n  });\n}\n\nif (valid.length === 0) {\n  throw new Error('No valid LinkedIn records found');\n}\n\nreturn valid;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        672,
+        128
+      ],
+      "id": "4733f249-720a-495c-a7b1-c0486df8945f",
+      "name": "Code in JavaScript1"
+    },
+    {
+      "parameters": {
+        "actorId": {
+          "__rl": true,
+          "value": "LpVuK3Zozwuipa5bp",
+          "mode": "list",
+          "cachedResultName": "LinkedIn Profile Scraper + Email ✅ No Cookies (harvestapi/linkedin-profile-scraper)",
+          "cachedResultUrl": "https://console.apify.com/actors/LpVuK3Zozwuipa5bp/input"
+        },
+        "customBody": "{\n  \"profileScraperMode\": \"Profile details no email ($4 per 1k)\",\n  \"queries\": [\"{{ $json.profile_url }}\"]\n}"
+      },
+      "type": "@apify/n8n-nodes-apify.apify",
+      "typeVersion": 1,
+      "position": [
+        880,
+        128
+      ],
+      "id": "a9f069d7-92b5-49da-ba85-e774889670df",
+      "name": "Run an Actor1",
+      "credentials": {
+        "apifyApi": {
+          "id": "qB67GNW8iVG12JSd",
+          "name": "Apify account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "Datasets",
+        "datasetId": "={{ $json.defaultDatasetId }}",
+        "options": {}
+      },
+      "type": "@apify/n8n-nodes-apify.apify",
+      "typeVersion": 1,
+      "position": [
+        1088,
+        128
+      ],
+      "id": "aa4a06ab-d635-4f95-9db5-ea447228d548",
+      "name": "Get dataset items1",
+      "credentials": {
+        "apifyApi": {
+          "id": "qB67GNW8iVG12JSd",
+          "name": "Apify account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all();\nconst original = $('Postgres1').first().json;\n\nreturn items.map(item => {\n  const d = item.json;\n\n  if (!d.url && !d.id) {\n    return {\n      json: {\n        error: true,\n        message: 'Invalid LinkedIn post data',\n        message_id: original.message_id\n      }\n    };\n  }\n\n  // Normalize post URL\n  let postUrl = (d.url || d.postUrl || '').trim();\n  if (postUrl && !postUrl.startsWith('https://')) {\n    postUrl = 'https://' + postUrl;\n  }\n\n  // Extract metrics\n  const reactions = d.likesCount || d.reactions || 0;\n  const comments = d.commentsCount || d.comments || 0;\n\n  // Score\n  let score = 0;\n  if (reactions > 1000) score = 100;\n  else if (reactions > 500) score = 80;\n  else if (reactions > 100) score = 60;\n  else score = 30;\n\n  // Normalize content\n  const content = (d.text || d.content || '')\n    .substring(0, 200)\n    .replace(/\\n/g, ' ')\n    .trim();\n\n  return {\n    json: {\n      message_id: original.message_id || 'MSG-002',\n      name: d.authorName || original.username || '',\n      post_url: postUrl,\n      content: content,\n      reactions: reactions,\n      comments: comments,\n      post_score: score,\n      platform: 'linkedin',\n      timestamp: new Date().toISOString()\n    }\n  };\n});"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1296,
+        128
+      ],
+      "id": "42e2f009-f2a2-416b-b0b4-56ec3c876bdc",
+      "name": "Code in JavaScript2"
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "1LaQklQJNW8uV9DGB3G4eEv7ooN2ueXJ-rzI8HhwO5Fo",
+          "mode": "list",
+          "cachedResultName": "Competition Post Analysis",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1LaQklQJNW8uV9DGB3G4eEv7ooN2ueXJ-rzI8HhwO5Fo/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": 933133512,
+          "mode": "list",
+          "cachedResultName": "LinkedIn Post Analysis",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1LaQklQJNW8uV9DGB3G4eEv7ooN2ueXJ-rzI8HhwO5Fo/edit#gid=933133512"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "message_id",
+              "displayName": "message_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "name",
+              "displayName": "name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "post_url",
+              "displayName": "post_url",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "content",
+              "displayName": "content",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "reactions",
+              "displayName": "reactions",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "comments",
+              "displayName": "comments",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "post_score",
+              "displayName": "post_score",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "timestamp",
+              "displayName": "timestamp",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        1504,
+        128
+      ],
+      "id": "34be2fcf-71e0-4009-9f84-644f3c29f652",
+      "name": "Append row in sheet1",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "p29c8vZBT44DvNDB",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE competition_posts\nSET status = 'processed', processed = TRUE\nWHERE message_id = '{{ $json.message_id }}';",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        1712,
+        128
+      ],
+      "id": "ebfcb23e-7760-4d19-8a5b-b12b271c9e31",
+      "name": "Execute a SQL query3",
+      "credentials": {
+        "postgres": {
+          "id": "Pz5LiQSqb8EQE2AD",
+          "name": "Postgres account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "When clicking ‘Execute workflow’": {
+      "main": [
+        [
+          {
+            "node": "Execute a SQL query2",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Execute a SQL query",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute a SQL query": {
+      "main": [
+        [
+          {
+            "node": "Validate Instagram Records",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Run an Actor",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Instagram Records": {
+      "main": [
+        [
+          {
+            "node": "Run an Actor",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run an Actor": {
+      "main": [
+        [
+          {
+            "node": "Get dataset items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get dataset items": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript": {
+      "main": [
+        [
+          {
+            "node": "Append row in sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Append row in sheet": {
+      "main": [
+        [
+          {
+            "node": "Execute a SQL query1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute a SQL query2": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript1": {
+      "main": [
+        [
+          {
+            "node": "Run an Actor1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run an Actor1": {
+      "main": [
+        [
+          {
+            "node": "Get dataset items1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get dataset items1": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript2": {
+      "main": [
+        [
+          {
+            "node": "Append row in sheet1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Append row in sheet1": {
+      "main": [
+        [
+          {
+            "node": "Execute a SQL query3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "ab41d250-a511-4263-8c20-454455075a5f",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "dfa9bd419da97e8a72d6069acb67e95575c89baa71302d0781a7331301986176"
+  },
+  "id": "UvJc9sLoKy9zISOz",
+  "tags": []
+}
