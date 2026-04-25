@@ -1,0 +1,584 @@
+{
+  "name": "n8n_mid_8_Competition Count Post Agent",
+  "nodes": [
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -112,
+        16
+      ],
+      "id": "952d90a8-be4e-414e-960b-b65f46732369",
+      "name": "When clicking ‘Execute workflow’"
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "1PPIaIvJJsY5Jovk8_4psgR7xYc6i_KEY8p5QQZBU7DY",
+          "mode": "list",
+          "cachedResultName": "Competition Count Agent",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1PPIaIvJJsY5Jovk8_4psgR7xYc6i_KEY8p5QQZBU7DY/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Instagram Profiles",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1PPIaIvJJsY5Jovk8_4psgR7xYc6i_KEY8p5QQZBU7DY/edit#gid=0"
+        },
+        "filtersUI": {
+          "values": [
+            {
+              "lookupColumn": "status",
+              "lookupValue": "new"
+            },
+            {
+              "lookupColumn": "processed",
+              "lookupValue": "false"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        192,
+        -96
+      ],
+      "id": "24fa6c9b-c7ce-42e4-8bdd-384647373337",
+      "name": "Insta",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "p29c8vZBT44DvNDB",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "1PPIaIvJJsY5Jovk8_4psgR7xYc6i_KEY8p5QQZBU7DY",
+          "mode": "list",
+          "cachedResultName": "Competition Count Agent",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1PPIaIvJJsY5Jovk8_4psgR7xYc6i_KEY8p5QQZBU7DY/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": 1090827463,
+          "mode": "list",
+          "cachedResultName": "LinkedIn Profiles",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1PPIaIvJJsY5Jovk8_4psgR7xYc6i_KEY8p5QQZBU7DY/edit#gid=1090827463"
+        },
+        "filtersUI": {
+          "values": [
+            {
+              "lookupColumn": "status",
+              "lookupValue": "new"
+            },
+            {
+              "lookupColumn": "processed",
+              "lookupValue": "FALSE"
+            }
+          ]
+        },
+        "combineFilters": "OR",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        192,
+        128
+      ],
+      "id": "b32bec6d-c0fb-4a82-8b96-0fc743136d84",
+      "name": "Linkedin",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "p29c8vZBT44DvNDB",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "actorId": {
+          "__rl": true,
+          "value": "bGApZ3CtTxA9fv2rl",
+          "mode": "list",
+          "cachedResultName": "🔥 Instagram Profile Scraper API (coderx/instagram-profile-scraper-api)",
+          "cachedResultUrl": "https://console.apify.com/actors/bGApZ3CtTxA9fv2rl/input"
+        },
+        "customBody": "={\n  \"usernames\": [\"{{ $json.username }}\"],\n  \"resultsLimit\": 1\n}"
+      },
+      "type": "@apify/n8n-nodes-apify.apify",
+      "typeVersion": 1,
+      "position": [
+        400,
+        -96
+      ],
+      "id": "c119af94-0b3f-45cc-b73d-fe46b3757b2d",
+      "name": "Run an Actor",
+      "credentials": {
+        "apifyApi": {
+          "id": "qB67GNW8iVG12JSd",
+          "name": "Apify account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "Datasets",
+        "datasetId": "={{ $json.defaultDatasetId }}",
+        "options": {}
+      },
+      "type": "@apify/n8n-nodes-apify.apify",
+      "typeVersion": 1,
+      "position": [
+        608,
+        -96
+      ],
+      "id": "76592863-da13-4887-bc1d-e44095306bb6",
+      "name": "Get dataset items",
+      "credentials": {
+        "apifyApi": {
+          "id": "qB67GNW8iVG12JSd",
+          "name": "Apify account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all();\n\nreturn items.map(item => {\n  const d = item.json;\n\n  if (!d.username && !d.id) {\n    return {\n      json: {\n        error: true,\n        message: 'Missing required fields',\n      }\n    };\n  }\n\n  const username = (d.username || '').toLowerCase().trim();\n\n  return {\n    json: {\n      id: d.id || '',\n      username: username,\n      profile_url: `https://www.instagram.com/${username}/`,\n      followers: d.followersCount || 0,\n      posts_count: d.postsCount || 0,\n      following: d.followsCount || 0,\n      bio: (d.biography || '').substring(0, 200),\n      timestamp: new Date().toISOString()\n    }\n  };\n});"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        816,
+        -96
+      ],
+      "id": "9b9cb34f-ae25-4ad4-9e7c-d6bebd3169a7",
+      "name": "Code in JavaScript"
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "1PPIaIvJJsY5Jovk8_4psgR7xYc6i_KEY8p5QQZBU7DY",
+          "mode": "list",
+          "cachedResultName": "Competition Count Agent",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1PPIaIvJJsY5Jovk8_4psgR7xYc6i_KEY8p5QQZBU7DY/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": 1329486270,
+          "mode": "list",
+          "cachedResultName": "Instagram Results",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1PPIaIvJJsY5Jovk8_4psgR7xYc6i_KEY8p5QQZBU7DY/edit#gid=1329486270"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "record_id": "={{ $json.id }}",
+            "username": "={{ $json.username }}",
+            "followers": "={{ $json.followers }}",
+            "posts_count": "={{ $json.posts_count }}",
+            "following": "={{ $json.following }}",
+            "bio": "={{ $json.bio }}",
+            "timestamp": "={{ $json.timestamp }}",
+            "post_count_score": "={{ $json.posts_count }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "record_id",
+              "displayName": "record_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "username",
+              "displayName": "username",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "followers",
+              "displayName": "followers",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "posts_count",
+              "displayName": "posts_count",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "following",
+              "displayName": "following",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "bio",
+              "displayName": "bio",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "post_count_score",
+              "displayName": "post_count_score",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "timestamp",
+              "displayName": "timestamp",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        1024,
+        -96
+      ],
+      "id": "925d6674-dcf7-4e99-bd13-1287f5fe1d5b",
+      "name": "Append row in sheet",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "p29c8vZBT44DvNDB",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "actorId": {
+          "__rl": true,
+          "value": "LpVuK3Zozwuipa5bp",
+          "mode": "list",
+          "cachedResultName": "LinkedIn Profile Scraper + Email ✅ No Cookies (harvestapi/linkedin-profile-scraper)",
+          "cachedResultUrl": "https://console.apify.com/actors/LpVuK3Zozwuipa5bp/input"
+        },
+        "customBody": "={\n  \"profileScraperMode\": \"Profile details no email ($4 per 1k)\",\n  \"queries\": [\"{{ $json.profile_url }}\"]\n} "
+      },
+      "type": "@apify/n8n-nodes-apify.apify",
+      "typeVersion": 1,
+      "position": [
+        400,
+        128
+      ],
+      "id": "161d3af9-262c-42bb-b7b8-ea9bfdd9dbdb",
+      "name": "Run an Actor1",
+      "credentials": {
+        "apifyApi": {
+          "id": "qB67GNW8iVG12JSd",
+          "name": "Apify account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "Datasets",
+        "datasetId": "={{ $json.defaultDatasetId }}",
+        "options": {}
+      },
+      "type": "@apify/n8n-nodes-apify.apify",
+      "typeVersion": 1,
+      "position": [
+        608,
+        128
+      ],
+      "id": "bef8b36d-ba9b-4f78-bb38-313a622bf96c",
+      "name": "Get dataset items1",
+      "credentials": {
+        "apifyApi": {
+          "id": "qB67GNW8iVG12JSd",
+          "name": "Apify account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all();\n\nreturn items.map(item => {\n  const d = item.json;\n\n  // Validate required fields\n  if (!d.firstName && !d.fullName && !d.name) {\n    return {\n      json: {\n        error: true,\n        message: 'Missing required fields from LinkedIn scraper',\n        raw: JSON.stringify(d).substring(0, 200)\n      }\n    };\n  }\n\n  // Normalize name\n  const fullName = (\n    d.fullName ||\n    d.name ||\n    `${d.firstName || ''} ${d.lastName || ''}`.trim()\n  );\n\n  // Normalize profile URL\n  let profileUrl = (d.linkedInUrl || d.url || '').trim();\n  if (profileUrl && !profileUrl.startsWith('http')) {\n    profileUrl = 'https://' + profileUrl;\n  }\n\n  // Extract data\n  const connections = d.connectionsCount || d.connections || 0;\n  const jobTitle = d.headline || d.jobTitle || '';\n  const company = d.companyName || d.currentCompany || '';\n\n  // Scoring logic (improved)\n  let score = 0;\n  if (connections > 50000) score = 100;\n  else if (connections > 10000) score = 90;\n  else if (connections > 5000) score = 80;\n  else if (connections > 1000) score = 60;\n  else if (connections > 500) score = 40;\n  else score = 20;\n\n  // Duplicate key\n  const dupKey = `linkedin_${fullName.toLowerCase().replace(/\\s+/g, '_')}`;\n\n  return {\n    json: {\n      record_id: 'REC-002', // ✅ removed broken node reference\n      name: fullName,\n      profile_url: profileUrl,\n      connections: connections,\n      job_title: jobTitle,\n      company: company,\n      score: score,\n      platform: 'linkedin',\n      dup_key: dupKey,\n      timestamp: new Date().toISOString()\n    }\n  };\n});"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        816,
+        128
+      ],
+      "id": "cba2f4c6-2f24-4efb-8982-6af8d87cfa70",
+      "name": "Code in JavaScript1"
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "1PPIaIvJJsY5Jovk8_4psgR7xYc6i_KEY8p5QQZBU7DY",
+          "mode": "list",
+          "cachedResultName": "Competition Count Agent",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1PPIaIvJJsY5Jovk8_4psgR7xYc6i_KEY8p5QQZBU7DY/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": 613784388,
+          "mode": "list",
+          "cachedResultName": "LinkedIn Results",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1PPIaIvJJsY5Jovk8_4psgR7xYc6i_KEY8p5QQZBU7DY/edit#gid=613784388"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "record_id": "={{ $json.record_id }}",
+            "name": "={{ $json.name }}",
+            "profile_url": "={{ $json.profile_url }}",
+            "connections": "={{ $json.connections }}",
+            "job_title": "={{ $json.job_title }}",
+            "companyscore": "={{ $json.score }}",
+            "timestamp": "={{ $json.timestamp }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "record_id",
+              "displayName": "record_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "name",
+              "displayName": "name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "profile_url",
+              "displayName": "profile_url",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "connections",
+              "displayName": "connections",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "job_title",
+              "displayName": "job_title",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "companyscore",
+              "displayName": "companyscore",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "timestamp",
+              "displayName": "timestamp",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        1024,
+        128
+      ],
+      "id": "df9a9f51-f998-48c2-8aca-1ad34e79df8f",
+      "name": "Append row in sheet1",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "p29c8vZBT44DvNDB",
+          "name": "Google Sheets account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "When clicking ‘Execute workflow’": {
+      "main": [
+        [
+          {
+            "node": "Insta",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Linkedin",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Insta": {
+      "main": [
+        [
+          {
+            "node": "Run an Actor",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run an Actor": {
+      "main": [
+        [
+          {
+            "node": "Get dataset items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get dataset items": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript": {
+      "main": [
+        [
+          {
+            "node": "Append row in sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Linkedin": {
+      "main": [
+        [
+          {
+            "node": "Run an Actor1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run an Actor1": {
+      "main": [
+        [
+          {
+            "node": "Get dataset items1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get dataset items1": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript1": {
+      "main": [
+        [
+          {
+            "node": "Append row in sheet1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "de2bd6fb-5b6b-4fe7-9883-747370345966",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "dfa9bd419da97e8a72d6069acb67e95575c89baa71302d0781a7331301986176"
+  },
+  "id": "plp7VXZ4p6DvjDiQ",
+  "tags": []
+}
