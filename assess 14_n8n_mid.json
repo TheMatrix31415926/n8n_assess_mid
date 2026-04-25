@@ -1,0 +1,533 @@
+{
+  "name": "assess 14_n8n_mid",
+  "nodes": [
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "id": "fa2cb1a3-664f-4547-a514-da5d47c1a8b0",
+      "name": "When clicking ‘Execute workflow’"
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "1mn2INingqC2YORdFr_1b4A3QwVzQUcyz7njOcEf1eXw",
+          "mode": "list",
+          "cachedResultName": "Email Outbound Agent",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1mn2INingqC2YORdFr_1b4A3QwVzQUcyz7njOcEf1eXw/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Leads",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1mn2INingqC2YORdFr_1b4A3QwVzQUcyz7njOcEf1eXw/edit#gid=0"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        224,
+        16
+      ],
+      "id": "8743f3dc-e0a7-4490-9896-a242bd336cae",
+      "name": "Get row(s) in sheet",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "p29c8vZBT44DvNDB",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "0c0b6ff9-f613-428c-86dd-ccfc6d86778e",
+              "leftValue": "={{ $json.status }}",
+              "rightValue": "new",
+              "operator": {
+                "type": "string",
+                "operation": "equals",
+                "name": "filter.operator.equals"
+              }
+            },
+            {
+              "id": "a78a6f1d-2173-4975-b75f-938218457d22",
+              "leftValue": "={{ $json.processed }}",
+              "rightValue": "false",
+              "operator": {
+                "type": "string",
+                "operation": "equals",
+                "name": "filter.operator.equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        432,
+        16
+      ],
+      "id": "89856e58-84b3-46cb-bc0e-9a77adaa59c4",
+      "name": "If"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        720,
+        -80
+      ],
+      "id": "a2b2bcbe-7170-43cb-8d21-296931f07f75",
+      "name": "Loop Over Items"
+    },
+    {
+      "parameters": {
+        "amount": 1
+      },
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        912,
+        112
+      ],
+      "id": "ecb56e88-192a-4247-9009-4f919a84081c",
+      "name": "Wait",
+      "webhookId": "734a432a-9b6f-4251-ab36-20c3e54c903c"
+    },
+    {
+      "parameters": {
+        "jsCode": "const item = $input.first();\nconst d = item.json;\n\n// Validate required fields\nconst missing = [];\nif (!d.message_id) missing.push('message_id');\nif (!d.from_email) missing.push('from_email');\nif (!d.subject) missing.push('subject');\n\nif (missing.length > 0) {\n  return [{\n    json: {\n      error: true,\n      skip: true,\n      message: 'Missing fields: ' + missing.join(', '),\n      message_id: d.message_id || 'UNKNOWN'\n    }\n  }];\n}\n\n// Normalize email\nconst email = (d.from_email || '').toLowerCase().trim();\n\n// Validate email format\nconst emailRegex = /^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/;\nif (!emailRegex.test(email)) {\n  return [{\n    json: {\n      error: true,\n      skip: true,\n      message: 'Invalid email format: ' + email,\n      message_id: d.message_id\n    }\n  }];\n}\n\n// Normalize subject\nconst subject = (d.subject || '').trim();\n\n// Generate duplicate key\nconst dupKey = email + '_' + \n  subject.toLowerCase().replace(/\\s+/g, '_');\n\nreturn [{\n  json: {\n    message_id: d.message_id,\n    to_email: email,\n    subject: subject,\n    dup_key: dupKey,\n    validation_status: 'VALID',\n    skip: false\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1120,
+        112
+      ],
+      "id": "5d5fc3bc-c502-4e88-9b69-95ca4499e2bb",
+      "name": "Code in JavaScript"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "157d4151-591b-46b8-af48-8003d1837f29",
+              "leftValue": "={{ $json.skip }}",
+              "rightValue": "false",
+              "operator": {
+                "type": "string",
+                "operation": "equals",
+                "name": "filter.operator.equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        1328,
+        112
+      ],
+      "id": "4e61e741-2893-4c70-96ed-bdde7867d978",
+      "name": "If1"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Write a personalized outbound email body for this lead:\n\nEmail: {{ $json.to_email }}\nSubject they mentioned: {{ $json.subject }}\n\nThe email should:\n- Thank them for their interest\n- Briefly mention Tayana Academy courses\n- Include a clear call to action to book a call\n- Sound warm and professional\n- Be under 150 words\n\nReturn ONLY the email body text.",
+        "options": {
+          "systemMessage": "You are a professional email writer for Tayana Academy.\nWrite personalized, warm outbound emails.\nAlways respond with ONLY the email body text.\nNo subject line. No greeting header. Just the body.\nKeep it under 150 words."
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        1568,
+        96
+      ],
+      "id": "1e0ce218-47f0-46b4-b658-e47c047efedc",
+      "name": "AI Agent"
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "value": "gpt-4o-mini",
+          "mode": "list",
+          "cachedResultName": "gpt-4o-mini"
+        },
+        "builtInTools": {},
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.3,
+      "position": [
+        1504,
+        320
+      ],
+      "id": "0ecd34d1-f9e5-43fd-bd9b-343195694c82",
+      "name": "OpenAI Chat Model",
+      "credentials": {
+        "openAiApi": {
+          "id": "X6yz5KIllfL8AWsR",
+          "name": "OpenAI account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "1mn2INingqC2YORdFr_1b4A3QwVzQUcyz7njOcEf1eXw",
+          "mode": "list",
+          "cachedResultName": "Email Outbound Agent",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1mn2INingqC2YORdFr_1b4A3QwVzQUcyz7njOcEf1eXw/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": 864960299,
+          "mode": "list",
+          "cachedResultName": "Email Log",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1mn2INingqC2YORdFr_1b4A3QwVzQUcyz7njOcEf1eXw/edit#gid=864960299"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "message_id": "={{ $('If1').item.json.message_id }}",
+            "to_email": "={{ $('If1').item.json.to_email }}",
+            "subject": "={{ $('If1').item.json.subject }}",
+            "email_body": "={{ $json.output }}",
+            "status": "={{ $('Wait').item.json.status }}",
+            "timestamp": "{{$now.toISO()}}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "message_id",
+              "displayName": "message_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "to_email",
+              "displayName": "to_email",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "subject",
+              "displayName": "subject",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "email_body",
+              "displayName": "email_body",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "status",
+              "displayName": "status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "timestamp",
+              "displayName": "timestamp",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        1888,
+        112
+      ],
+      "id": "80bb2dd9-d07d-4c68-a650-ec51855a5520",
+      "name": "Append row in sheet",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "p29c8vZBT44DvNDB",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $json.to_email }}",
+        "subject": "=Re: {{ $json.subject }}",
+        "emailType": "text",
+        "message": "={{ $json.email_body }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        2176,
+        144
+      ],
+      "id": "b03b7fa1-cb5f-49b7-bc67-83aa3e13184d",
+      "name": "Send a message",
+      "webhookId": "93257ca1-311f-4fbf-a6d9-db456404402e",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "KCDKXdYXOHRPfdIs",
+          "name": "Gmail account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE email_leads\nSET status = 'sent',\n    processed = TRUE\nWHERE message_id = '{{ $json.message_id }}';\n\n\nINSERT INTO email_log\n(message_id, to_email, subject, action, result, message)\nVALUES (\n  '{{ $json.message_id }}',\n  '{{ $json.to_email }}',\n  '{{ $json.subject }}',\n  'email_sent',\n  'success',\n  'Email sent at {{ $now }}'\n);",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        2400,
+        288
+      ],
+      "id": "34e7261e-b81c-4778-8018-301a8fc7f92c",
+      "name": "Execute a SQL query",
+      "credentials": {
+        "postgres": {
+          "id": "Pz5LiQSqb8EQE2AD",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "sendTo": "dewanshu814@gmail.com",
+        "subject": "hey",
+        "emailType": "text",
+        "message": "how are u",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        2320,
+        784
+      ],
+      "id": "ecf338f5-24dd-4dd5-8a7a-f0e882c06dd8",
+      "name": "Send a message1",
+      "webhookId": "08d80971-7377-4b3e-99c3-b4c8a4af0870",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "KCDKXdYXOHRPfdIs",
+          "name": "Gmail account 2"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "When clicking ‘Execute workflow’": {
+      "main": [
+        [
+          {
+            "node": "Get row(s) in sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get row(s) in sheet": {
+      "main": [
+        [
+          {
+            "node": "If",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Loop Over Items": {
+      "main": [
+        [],
+        [
+          {
+            "node": "Wait",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript": {
+      "main": [
+        [
+          {
+            "node": "If1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If1": {
+      "main": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Agent": {
+      "main": [
+        [
+          {
+            "node": "Append row in sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Append row in sheet": {
+      "main": [
+        [
+          {
+            "node": "Send a message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send a message": {
+      "main": [
+        [
+          {
+            "node": "Execute a SQL query",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute a SQL query": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "e599d58b-2158-4ddb-996e-9bad64e3529c",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "dfa9bd419da97e8a72d6069acb67e95575c89baa71302d0781a7331301986176"
+  },
+  "id": "ERBPJeMAfrOi0BWf",
+  "tags": []
+}
