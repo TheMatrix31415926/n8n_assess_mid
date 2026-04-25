@@ -1,0 +1,424 @@
+{
+  "name": "assess 12_n8n_mid",
+  "nodes": [
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "id": "b388d731-7709-4cc1-89d9-e9af6bd45d4b",
+      "name": "When clicking ‘Execute workflow’"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT \n    l.message_id,\n    l.from_email,\n    l.full_name,\n    l.phone,\n    l.course_interest,\n    l.source,\n    l.status,\n    l.created_at\nFROM _learner l\nWHERE l.status NOT IN ('Not_Contacted', 'No_response')\nAND l.message_id NOT IN (\n    SELECT message_id FROM opportunity\n)\nORDER BY l.created_at ASC;",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        208,
+        0
+      ],
+      "id": "c4e28b22-ceb0-496c-ae9c-b3136daceb02",
+      "name": "Select rows from a table",
+      "credentials": {
+        "postgres": {
+          "id": "Pz5LiQSqb8EQE2AD",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all();\nconst valid = [];\nconst invalid = [];\n\nfor (const item of items) {\n  const d = item.json;\n  const missing = [];\n\n  // Validate required fields\n  if (!d.message_id) missing.push('message_id');\n  if (!d.from_email) missing.push('from_email');\n  if (!d.full_name) missing.push('full_name');\n  if (!d.course_interest) missing.push('course_interest');\n\n  if (missing.length > 0) {\n    invalid.push({\n      message_id: d.message_id || 'UNKNOWN',\n      reason: 'Missing: ' + missing.join(', ')\n    });\n    continue; // skip invalid records\n  }\n\n  // Normalize email to lowercase\n  const email = (d.from_email || '').toLowerCase().trim();\n\n  // Normalize phone\n  let phone = (d.phone || '').replace(/\\s+/g, '');\n  if (phone && !phone.startsWith('+')) {\n    phone = '+' + phone;\n  }\n\n  // Normalize name — title case\n  const fullName = (d.full_name || '')\n    .trim()\n    .split(' ')\n    .map(w => w.charAt(0).toUpperCase() + \n               w.slice(1).toLowerCase())\n    .join(' ');\n\n  // Normalize course interest\n  const courseInterest = (d.course_interest || '')\n    .trim();\n\n  // Reshape for opportunity table\n  valid.push({\n    json: {\n      message_id: d.message_id,\n      full_name: fullName,\n      email: email,\n      phone: phone,\n      course_interest: courseInterest,\n      source: d.source || 'unknown',\n      opportunity_status: 'New',\n      migrated_at: new Date().toISOString()\n    }\n  });\n}\n\n// Log invalid ones to console for visibility\nif (invalid.length > 0) {\n  console.log('Invalid records skipped:', \n    JSON.stringify(invalid));\n}\n\nif (valid.length === 0) {\n  throw new Error(\n    'No valid records to migrate. ' +\n    'All records are either invalid, ' +\n    'already migrated, or have excluded status.'\n  );\n}\n\nreturn valid;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        416,
+        0
+      ],
+      "id": "4203a381-35cb-4cce-ac48-62cc9cc97285",
+      "name": "Validate and Reshape"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT COUNT(*) as cnt\nFROM opportunity\nWHERE message_id = '{{ $json.message_id }}';",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        624,
+        0
+      ],
+      "id": "1c5be422-dfc4-45e3-82db-29a743d6ae00",
+      "name": "Duplicate Check",
+      "credentials": {
+        "postgres": {
+          "id": "Pz5LiQSqb8EQE2AD",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "597dc503-f586-4ff6-86d9-9bcc0bd4973c",
+              "leftValue": "={{ $json.cnt }}",
+              "rightValue": "0",
+              "operator": {
+                "type": "string",
+                "operation": "equals",
+                "name": "filter.operator.equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        832,
+        0
+      ],
+      "id": "4ea82c9d-1455-4210-ab9d-bb14978be88b",
+      "name": "If"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO migration_log\n(message_id, full_name, action, result, message)\nVALUES (\n  '{{ $json.message_id }}',\n  '{{ $json.full_name }}',\n  'migration',\n  'duplicate',\n  'Already exists in opportunity table - skipped'\n);",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        1040,
+        128
+      ],
+      "id": "99459ed4-0b92-47c5-9b8f-f754fc895691",
+      "name": "Postgres log",
+      "credentials": {
+        "postgres": {
+          "id": "Pz5LiQSqb8EQE2AD",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "schema": {
+          "__rl": true,
+          "mode": "list",
+          "value": "public"
+        },
+        "table": {
+          "__rl": true,
+          "value": "opportunity",
+          "mode": "list",
+          "cachedResultName": "opportunity"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "message_id": "={{ $('Validate and Reshape').item.json.message_id }}",
+            "full_name": "={{ $('Validate and Reshape').item.json.full_name }}",
+            "email": "={{ $('Validate and Reshape').item.json.email }}",
+            "phone": "={{ $('Validate and Reshape').item.json.phone }}",
+            "course_interest": "={{ $('Validate and Reshape').item.json.course_interest }}",
+            "source": "={{ $('Validate and Reshape').item.json.source }}",
+            "opportunity_status": "={{ $('Validate and Reshape').item.json.opportunity_status }}",
+            "migrated_at": "={{ $('Validate and Reshape').item.json.migrated_at }}"
+          },
+          "matchingColumns": [
+            "id"
+          ],
+          "schema": [
+            {
+              "id": "id",
+              "displayName": "id",
+              "required": false,
+              "defaultMatch": true,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "message_id",
+              "displayName": "message_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "full_name",
+              "displayName": "full_name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "email",
+              "displayName": "email",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "phone",
+              "displayName": "phone",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "course_interest",
+              "displayName": "course_interest",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "source",
+              "displayName": "source",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "opportunity_status",
+              "displayName": "opportunity_status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "migrated_at",
+              "displayName": "migrated_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "dateTime",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        1040,
+        -80
+      ],
+      "id": "6b44b3ac-1f3b-4101-86c8-a11085c591b0",
+      "name": "Insert rows in a table",
+      "credentials": {
+        "postgres": {
+          "id": "Pz5LiQSqb8EQE2AD",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "amount": 2
+      },
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        1248,
+        -80
+      ],
+      "id": "ad8c30c2-d527-40c6-bf2f-236e041eadcc",
+      "name": "Wait",
+      "webhookId": "5b5da882-3434-4cc9-b4c1-062cff4175bf"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE _learner\nSET status = 'Migrated'\nWHERE message_id = '{{ $json.message_id }}';",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        1456,
+        -80
+      ],
+      "id": "dffaacd1-66a1-4e0b-b78b-eaea485d2d92",
+      "name": "Execute a SQL query",
+      "credentials": {
+        "postgres": {
+          "id": "Pz5LiQSqb8EQE2AD",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO migration_log\n(message_id, full_name, action, result, message)\nVALUES (\n  '{{ $json.message_id }}',\n  '{{ $json.full_name }}',\n  'migration',\n  'success',\n  'Migrated to opportunity table - Course: {{ $json.course_interest }}'\n);",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        1664,
+        -80
+      ],
+      "id": "abe6f93e-78ff-4914-8157-696262454803",
+      "name": "success log",
+      "credentials": {
+        "postgres": {
+          "id": "Pz5LiQSqb8EQE2AD",
+          "name": "Postgres account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "When clicking ‘Execute workflow’": {
+      "main": [
+        [
+          {
+            "node": "Select rows from a table",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Select rows from a table": {
+      "main": [
+        [
+          {
+            "node": "Validate and Reshape",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate and Reshape": {
+      "main": [
+        [
+          {
+            "node": "Duplicate Check",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Duplicate Check": {
+      "main": [
+        [
+          {
+            "node": "If",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If": {
+      "main": [
+        [
+          {
+            "node": "Insert rows in a table",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Postgres log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Insert rows in a table": {
+      "main": [
+        [
+          {
+            "node": "Wait",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait": {
+      "main": [
+        [
+          {
+            "node": "Execute a SQL query",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute a SQL query": {
+      "main": [
+        [
+          {
+            "node": "success log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "9fe2a9a3-29b5-45d2-9599-d4972ccc55bb",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "dfa9bd419da97e8a72d6069acb67e95575c89baa71302d0781a7331301986176"
+  },
+  "id": "TESvUXqUw79s5yUv",
+  "tags": []
+}
