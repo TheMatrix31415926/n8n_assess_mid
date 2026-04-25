@@ -1,0 +1,680 @@
+{
+  "name": "assess_7_n8n_mid",
+  "nodes": [
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "id": "18ef6a7d-552b-464d-add2-f72603e5d846",
+      "name": "When clicking ‘Execute workflow’"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Read from Postgres next — this node prepares \n// the initial context for the workflow run\n\nreturn [{\n  json: {\n    run_id: 'RUN-' + Date.now(),\n    triggered_at: new Date().toISOString(),\n    search_context: 'competitor analysis',\n    status: 'initiated'\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        208,
+        0
+      ],
+      "id": "78e65409-5f3d-4329-82f4-d3b79afabeec",
+      "name": "Code in JavaScript"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT * FROM competitor_records\nWHERE status = 'new' \nAND processed = FALSE\nORDER BY created_at ASC;",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        416,
+        0
+      ],
+      "id": "08671ed2-b534-4ae1-9cd5-5489af556c0d",
+      "name": "Execute a SQL query",
+      "credentials": {
+        "postgres": {
+          "id": "Pz5LiQSqb8EQE2AD",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "q": "https://serpapi.com/search.json ?q={{ $json.company_name }} competitors &api_key=YOUR_SERPAPI_KEY &num=5",
+        "additionalFields": {},
+        "requestOptions": {}
+      },
+      "type": "n8n-nodes-serpapi.serpApi",
+      "typeVersion": 1,
+      "position": [
+        624,
+        0
+      ],
+      "id": "87418037-c985-49fe-9ab2-236fc5cc5f2e",
+      "name": "Google search",
+      "credentials": {
+        "serpApi": {
+          "id": "ko7i9zx9nWkt4euX",
+          "name": "SerpApi account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all();\n\nreturn items.map(item => {\n  const d = item.json;\n\n  // Get company name from whatever field exists\n  // Check all possible field names from your Postgres/Sheet data\n  const companyName = \n    d.company_name ||    // from postgres\n    d.name ||            // alternative\n    d.subject ||         // from your input example\n    'Unknown Company';\n\n  return {\n    json: {\n      ...d,\n      company_name: companyName,           // ← AI Agent needs this\n      search_context: 'competitor analysis instagram influencer', // ← AI Agent needs this\n      company_name_normalized: companyName.trim().toLowerCase().replace(/\\s+/g, '-'),\n      search_timestamp: new Date().toISOString(),\n      validation_status: companyName !== 'Unknown Company' ? 'VALID' : 'INVALID'\n    }\n  };\n});"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        832,
+        0
+      ],
+      "id": "5fdb61c6-4e3b-440f-b5f0-b6ad2e9a9d50",
+      "name": "Code in JavaScript1"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Company: {{ $json.company_name }}\n\nFind top 3 competitors for this company.\nYou MUST return ONLY this exact JSON structure.\nNo explanation. No markdown. No backticks.\nJust the raw JSON starting with { :\n\n{\n  \"competitors\": [\n    {\n      \"name\": \"ActualCompanyName\",\n      \"website\": \"https://actualwebsite.com\",\n      \"instagram_handle\": \"@actualhandle\",\n      \"description\": \"one line about what they do\",\n      \"estimated_followers\": 75000\n    },\n    {\n      \"name\": \"ActualCompanyName2\",\n      \"website\": \"https://actualwebsite2.com\",\n      \"instagram_handle\": \"@actualhandle2\",\n      \"description\": \"one line about what they do\",\n      \"estimated_followers\": 50000\n    },\n    {\n      \"name\": \"ActualCompanyName3\",\n      \"website\": \"https://actualwebsite3.com\",\n      \"instagram_handle\": \"@actualhandle3\",\n      \"description\": \"one line about what they do\",\n      \"estimated_followers\": 30000\n    }\n  ]\n}",
+        "options": {
+          "systemMessage": "You are a competitor research assistant.\nAlways respond ONLY in valid JSON.\nNo extra text. No markdown. Just raw JSON."
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        1040,
+        0
+      ],
+      "id": "a684517c-46a3-49ff-9ca3-92bc646f349a",
+      "name": "AI Agent"
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "value": "gpt-4o-mini",
+          "mode": "list",
+          "cachedResultName": "gpt-4o-mini"
+        },
+        "builtInTools": {},
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.3,
+      "position": [
+        912,
+        208
+      ],
+      "id": "a59e4481-01bc-4aa1-a5a6-062abd3f864c",
+      "name": "OpenAI Chat Model",
+      "credentials": {
+        "openAiApi": {
+          "id": "X6yz5KIllfL8AWsR",
+          "name": "OpenAI account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all();\nconst results = [];\n\nfor (const item of items) {\n  const original = item.json;\n  \n  // Get the output string from AI Agent\n  let rawOutput = item.json.output || '';\n  \n  // If output is an object (schema issue), skip it\n  if (typeof rawOutput === 'object') {\n    continue;\n  }\n\n  let competitors = [];\n  \n  try {\n    // Clean the string — remove markdown if any\n    rawOutput = rawOutput\n      .replace(/```json/gi, '')\n      .replace(/```/g, '')\n      .trim();\n\n    // Find the JSON part\n    const jsonStart = rawOutput.indexOf('{');\n    const jsonEnd = rawOutput.lastIndexOf('}');\n    \n    if (jsonStart !== -1 && jsonEnd !== -1) {\n      const jsonString = rawOutput.substring(jsonStart, jsonEnd + 1);\n      const parsed = JSON.parse(jsonString);\n      competitors = parsed.competitors || [];\n    }\n  } catch(e) {\n    continue; // skip this item if parse fails\n  }\n\n  // Deduplicate\n  const seen = new Set();\n\n  for (const c of competitors) {\n    const key = (c.name || '').toLowerCase().trim();\n    \n    if (!seen.has(key) && key !== '') {\n      seen.add(key);\n\n      // Normalize website\n      let website = (c.website || '').trim();\n      if (website && !website.startsWith('https://')) {\n        website = 'https://' + website;\n      }\n\n      // Normalize Instagram handle\n      let handle = (c.instagram_handle || '').trim();\n      if (handle && !handle.startsWith('@')) {\n        handle = '@' + handle;\n      }\n\n      // Score based on followers\n      const followers = Number(c.estimated_followers) || 0;\n      let score = 40;\n      if (followers > 100000) score = 100;\n      else if (followers > 50000) score = 80;\n      else if (followers > 10000) score = 60;\n\n      results.push({\n        json: {\n          message_id: original.message_id || 'MSG-001',\n          company_name: c.name,\n          website: website,\n          instagram_handle: handle,\n          description: c.description || '',\n          estimated_followers: followers,\n          source_company: original.company_name || '',\n          qualification_score: score,\n          processed_at: new Date().toISOString()\n        }\n      });\n    }\n  }\n}\n\n// Safety check\nif (results.length === 0) {\n  return [{\n    json: {\n      error: true,\n      message: 'AI did not return valid competitor data',\n      tip: 'Check AI Agent prompt and turn OFF Require Specific Output Format'\n    }\n  }];\n}\n\nreturn results;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1392,
+        0
+      ],
+      "id": "d9d1fad8-9518-4479-a87a-51114823e14c",
+      "name": "Code in JavaScript2"
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "1oPYfuh-HgGQWagazieiKGMdKx-pBSOVpaY1FIPuzB78",
+          "mode": "list",
+          "cachedResultName": "Untitled spreadsheet",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1oPYfuh-HgGQWagazieiKGMdKx-pBSOVpaY1FIPuzB78/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": 942467193,
+          "mode": "list",
+          "cachedResultName": "Sheet2",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1oPYfuh-HgGQWagazieiKGMdKx-pBSOVpaY1FIPuzB78/edit#gid=942467193"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "message_id": "={{ $json.message_id }}",
+            "company_name": "={{ $json.company_name }}",
+            "website": "={{ $json.website }}",
+            "description": "={{ $json.description }}",
+            "instagram_handle": "={{ $json.instagram_handle }}",
+            "followers": "={{ $json.estimated_followers }}",
+            "score": "={{ $json.qualification_score }}",
+            "timestamp": "={{ $json.processed_at }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "message_id",
+              "displayName": "message_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "company_name",
+              "displayName": "company_name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "website",
+              "displayName": "website",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "description",
+              "displayName": "description",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "instagram_handle",
+              "displayName": "instagram_handle",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "followers",
+              "displayName": "followers",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "score",
+              "displayName": "score",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "timestamp",
+              "displayName": "timestamp",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        1552,
+        16
+      ],
+      "id": "7365df90-a876-423f-b8ea-ef89f5a6a575",
+      "name": "Append row in sheet",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "p29c8vZBT44DvNDB",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        1760,
+        16
+      ],
+      "id": "1936084f-7f68-46c1-9a82-069d1280f88b",
+      "name": "Loop Over Items"
+    },
+    {
+      "parameters": {
+        "actorId": {
+          "__rl": true,
+          "value": "bGApZ3CtTxA9fv2rl",
+          "mode": "list",
+          "cachedResultName": "🔥 Instagram Profile Scraper API (coderx/instagram-profile-scraper-api)",
+          "cachedResultUrl": "https://console.apify.com/actors/bGApZ3CtTxA9fv2rl/input"
+        },
+        "customBody": "{\n  \"usernames\": [\n    \"{{ $json.instagram_handle.replace('@', '') }}\"\n  ],\n  \"resultsLimit\": 5\n}"
+      },
+      "type": "@apify/n8n-nodes-apify.apify",
+      "typeVersion": 1,
+      "position": [
+        1968,
+        224
+      ],
+      "id": "978de39e-bb85-459b-87e9-73ac19e881d0",
+      "name": "Run an Actor",
+      "credentials": {
+        "apifyApi": {
+          "id": "qB67GNW8iVG12JSd",
+          "name": "Apify account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "Datasets",
+        "datasetId": "={{ $json.defaultDatasetId }}",
+        "options": {}
+      },
+      "type": "@apify/n8n-nodes-apify.apify",
+      "typeVersion": 1,
+      "position": [
+        2176,
+        224
+      ],
+      "id": "9f99cfb4-7d5e-43a5-9f54-ce0ed1f904cb",
+      "name": "Get dataset items",
+      "credentials": {
+        "apifyApi": {
+          "id": "qB67GNW8iVG12JSd",
+          "name": "Apify account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all();\nconst loopData = $('Loop Over Items').first().json;\n\nreturn items.map(item => {\n  const d = item.json;\n\n  const followers = d.followersCount || \n    loopData.estimated_followers || 0;\n  \n  // Recalculate score with real data\n  let score = 0;\n  if (followers > 100000) score = 100;\n  else if (followers > 50000) score = 80;\n  else if (followers > 10000) score = 60;\n  else if (followers > 1000) score = 40;\n  else score = 20;\n\n  return {\n    json: {\n      message_id: loopData.message_id,\n      company_name: loopData.company_name,\n      website: loopData.website,\n      instagram_handle: loopData.instagram_handle,\n      full_name: d.fullName || loopData.company_name,\n      real_followers: followers,\n      bio: d.biography || loopData.description,\n      posts_count: d.postsCount || 0,\n      final_score: score,\n      qualified: score >= 60,\n      enriched_at: new Date().toISOString()\n    }\n  };\n});"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2336,
+        256
+      ],
+      "id": "69868cd1-9b8b-47f7-a3a6-c649899b5c55",
+      "name": "Code in JavaScript3"
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "1oPYfuh-HgGQWagazieiKGMdKx-pBSOVpaY1FIPuzB78",
+          "mode": "list",
+          "cachedResultName": "Untitled spreadsheet",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1oPYfuh-HgGQWagazieiKGMdKx-pBSOVpaY1FIPuzB78/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": 942467193,
+          "mode": "list",
+          "cachedResultName": "Sheet2",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1oPYfuh-HgGQWagazieiKGMdKx-pBSOVpaY1FIPuzB78/edit#gid=942467193"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "message_id": "={{ $json.message_id }}",
+            "company_name": "={{ $json.company_name }}",
+            "website": "={{ $json.website }}",
+            "score": "={{ $json.final_score }}",
+            "instagram_handle": "={{ $json.instagram_handle }}",
+            "followers": "={{ $json.real_followers }}",
+            "description": "={{ $json.bio }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "message_id",
+              "displayName": "message_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "company_name",
+              "displayName": "company_name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "website",
+              "displayName": "website",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "description",
+              "displayName": "description",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "instagram_handle",
+              "displayName": "instagram_handle",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "followers",
+              "displayName": "followers",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "score",
+              "displayName": "score",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "timestamp",
+              "displayName": "timestamp",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        2512,
+        272
+      ],
+      "id": "5bea4d9a-4e59-42d8-8d36-4571d93228d9",
+      "name": "Append row in sheet1",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "p29c8vZBT44DvNDB",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE competitor_records \nSET status = 'processed', processed = TRUE\nWHERE message_id = '{{ $json.message_id }}';\n\n\n\n\n\nINSERT INTO competitor_log \n(message_id, company_name, action, result, message)\nVALUES (\n  '{{ $json.message_id }}',\n  '{{ $json.company_name }}',\n  'competitor_scrape',\n  'success',\n  'Score: {{ $json.final_score }}'\n);",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        2720,
+        272
+      ],
+      "id": "ee8a8984-89a6-4a1c-9df2-564f7e8ef5ce",
+      "name": "Execute a SQL query1",
+      "credentials": {
+        "postgres": {
+          "id": "Pz5LiQSqb8EQE2AD",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsonSchemaExample": "{\n  \"type\": \"object\",\n  \"properties\": {\n    \"competitors\": {\n      \"type\": \"array\",\n      \"items\": {\n        \"type\": \"object\",\n        \"properties\": {\n          \"name\": {\n            \"type\": \"string\"\n          },\n          \"website\": {\n            \"type\": \"string\"\n          },\n          \"instagram_handle\": {\n            \"type\": \"string\"\n          },\n          \"description\": {\n            \"type\": \"string\"\n          },\n          \"estimated_followers\": {\n            \"type\": \"number\"\n          }\n        },\n        \"required\": [\n          \"name\",\n          \"website\",\n          \"description\"\n        ]\n      }\n    }\n  }\n}"
+      },
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.3,
+      "position": [
+        1216,
+        208
+      ],
+      "id": "253f0752-f343-41d0-ae71-37c196c2707a",
+      "name": "Structured Output Parser"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "When clicking ‘Execute workflow’": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript": {
+      "main": [
+        [
+          {
+            "node": "Execute a SQL query",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute a SQL query": {
+      "main": [
+        [
+          {
+            "node": "Google search",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google search": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript1": {
+      "main": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Agent": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript2": {
+      "main": [
+        [
+          {
+            "node": "Append row in sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Append row in sheet": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Loop Over Items": {
+      "main": [
+        [],
+        [
+          {
+            "node": "Run an Actor",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run an Actor": {
+      "main": [
+        [
+          {
+            "node": "Get dataset items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get dataset items": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript3": {
+      "main": [
+        [
+          {
+            "node": "Append row in sheet1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Append row in sheet1": {
+      "main": [
+        [
+          {
+            "node": "Execute a SQL query1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute a SQL query1": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Structured Output Parser": {
+      "ai_outputParser": [
+        []
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "b4ccf152-565b-477e-802f-2dbfb5499b50",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "dfa9bd419da97e8a72d6069acb67e95575c89baa71302d0781a7331301986176"
+  },
+  "id": "EE5IspVBmQl07BOf",
+  "tags": []
+}
