@@ -1,0 +1,151 @@
+{
+  "name": "assess 15 n8n_mid",
+  "nodes": [
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "id": "545ce458-fd75-42dd-b00e-aaf3665045f3",
+      "name": "When clicking ‘Execute workflow’"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT \n    id,\n    event_id,\n    from_email,\n    full_name,\n    phone,\n    current_stage,\n    lead_score,\n    status,\n    created_at\nFROM nebula_contacts\nWHERE status = 'pending'\nORDER BY lead_score DESC, created_at ASC;",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        208,
+        0
+      ],
+      "id": "76fff9cd-e35b-4878-a888-2d706facdcab",
+      "name": "Execute a SQL query",
+      "credentials": {
+        "postgres": {
+          "id": "Pz5LiQSqb8EQE2AD",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all();\nconst results = [];\n\n// Funnel stage progression map\nconst funnelStages = {\n  'New_Lead':      { next: 'Contacted',     minScore: 0  },\n  'Contacted':     { next: 'Qualified',     minScore: 50 },\n  'Qualified':     { next: 'Proposal_Sent', minScore: 70 },\n  'Proposal_Sent': { next: 'Negotiation',   minScore: 75 },\n  'Negotiation':   { next: 'Closed_Won',    minScore: 85 },\n  'Closed_Won':    { next: 'Closed_Won',    minScore: 100}\n};\n\nfor (const item of items) {\n  const d = item.json;\n\n  // ── VALIDATE required fields ──\n  const missing = [];\n  if (!d.event_id)    missing.push('event_id');\n  if (!d.from_email)  missing.push('from_email');\n  if (!d.full_name)   missing.push('full_name');\n  if (!d.current_stage) missing.push('current_stage');\n\n  if (missing.length > 0) {\n    results.push({\n      json: {\n        ...d,\n        update_status: 'invalid',\n        skip: true,\n        reason: 'Missing: ' + missing.join(', ')\n      }\n    });\n    continue;\n  }\n\n  // ── NORMALIZE email ──\n  const email = (d.from_email || '')\n    .toLowerCase().trim();\n\n  // ── NORMALIZE phone ──\n  let phone = (d.phone || '').replace(/\\s+/g, '');\n  if (phone && !phone.startsWith('+')) {\n    phone = '+' + phone;\n  }\n\n  // ── NORMALIZE stage ──\n  const currentStage = (d.current_stage || '')\n    .trim()\n    .replace(/\\s+/g, '_');\n\n  // ── CALCULATE next funnel stage ──\n  const stageConfig = funnelStages[currentStage] || \n    { next: currentStage, minScore: 0 };\n\n  const leadScore = parseInt(d.lead_score) || 0;\n  const canAdvance = leadScore >= stageConfig.minScore;\n\n  const nextStage = canAdvance \n    ? stageConfig.next \n    : currentStage; // stay in current stage if score too low\n\n  // ── CALCULATE updated lead score ──\n  // Boost score slightly on each processing run\n  const updatedScore = Math.min(100, leadScore + 5);\n\n  // ── DETERMINE new status ──\n  let newStatus = 'updated';\n  if (nextStage === 'Closed_Won') newStatus = 'closed';\n  if (!canAdvance) newStatus = 'stalled';\n\n  results.push({\n    json: {\n      id: d.id,\n      event_id: d.event_id,\n      from_email: email,\n      full_name: d.full_name,\n      phone: phone,\n      current_stage: currentStage,\n      next_stage: nextStage,\n      lead_score: updatedScore,\n      update_status: newStatus,\n      can_advance: canAdvance,\n      skip: false,\n      updated_at: new Date().toISOString()\n    }\n  });\n}\n\nreturn results;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        416,
+        0
+      ],
+      "id": "b38c7bb9-9962-4b28-b919-050e59977a74",
+      "name": "Code in JavaScript"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE nebula_contacts\nSET \n    current_stage = '{{ $json.next_stage }}',\n    next_stage = '{{ $json.next_stage }}',\n    lead_score = {{ $json.lead_score }},\n    status = '{{ $json.update_status }}',\n    last_updated = NOW()\nWHERE event_id = '{{ $json.event_id }}'\nAND status = 'pending';",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        624,
+        0
+      ],
+      "id": "6423163b-0296-47bb-9298-bdadf8faade6",
+      "name": "Execute a SQL query1",
+      "credentials": {
+        "postgres": {
+          "id": "Pz5LiQSqb8EQE2AD",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO nebula_funnel_log\n(event_id, full_name, from_stage, \n to_stage, action, result, message)\nVALUES (\n  '{{ $json.event_id }}',\n  '{{ $json.full_name }}',\n  '{{ $json.current_stage }}',\n  '{{ $json.next_stage }}',\n  'funnel_update',\n  '{{ $json.update_status }}',\n  'Score: {{ $json.lead_score }} | Advanced: {{ $json.can_advance }}'\n);",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        816,
+        0
+      ],
+      "id": "4029ab33-edd9-4779-88d2-74a8a53e0e84",
+      "name": "Execute a SQL query2",
+      "credentials": {
+        "postgres": {
+          "id": "Pz5LiQSqb8EQE2AD",
+          "name": "Postgres account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "When clicking ‘Execute workflow’": {
+      "main": [
+        [
+          {
+            "node": "Execute a SQL query",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute a SQL query": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript": {
+      "main": [
+        [
+          {
+            "node": "Execute a SQL query1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute a SQL query1": {
+      "main": [
+        [
+          {
+            "node": "Execute a SQL query2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "38e1b3c9-4cf1-4071-9f5e-478b7497fc8a",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "dfa9bd419da97e8a72d6069acb67e95575c89baa71302d0781a7331301986176"
+  },
+  "id": "AB2jZDiWQa2tZ6Th",
+  "tags": []
+}
