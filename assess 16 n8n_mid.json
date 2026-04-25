@@ -1,0 +1,1376 @@
+{
+  "name": "assess 16 n8n_mid",
+  "nodes": [
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -80,
+        96
+      ],
+      "id": "595a7680-b627-43c9-a70c-8d522f908c73",
+      "name": "When clicking ‘Execute workflow’"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Prepare 3 search topics to run in parallel\nreturn [\n  {\n    json: {\n      search_topic: 'prompt_engineering',\n      search_query: 'prompt engineering instagram competitors',\n      record_id: 'REC-1001',\n      profile_url: 'https://www.instagram.com/promptengineering/',\n      status: 'new'\n    }\n  },\n  {\n    json: {\n      search_topic: 'power_bi',\n      search_query: 'power bi competitors instagram influencers',\n      record_id: 'REC-1002',\n      profile_url: 'https://www.instagram.com/powerbiofficial/',\n      status: 'new'\n    }\n  },\n  {\n    json: {\n      search_topic: 'lead_generation',\n      search_query: 'lead generation instagram competitors',\n      record_id: 'REC-1003',\n      profile_url: 'https://www.instagram.com/leadgeneration/',\n      status: 'new'\n    }\n  }\n];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        144,
+        96
+      ],
+      "id": "7a6344bc-dec8-48e0-a707-08fcad9a95a7",
+      "name": "Code in JavaScript"
+    },
+    {
+      "parameters": {
+        "url": "https://jsonplaceholder.typicode.com/posts",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "q",
+              "value": "={{ $json.search_query }}"
+            },
+            {
+              "name": "topic",
+              "value": "={{ $json.search_topic }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        368,
+        -128
+      ],
+      "id": "65cc513f-2b49-4357-878e-709bc18b845f",
+      "name": "HTTP Request"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        592,
+        -64
+      ],
+      "id": "fc952e05-794b-4269-bd82-a9fe52d5d633",
+      "name": "Merge"
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all();\n\nreturn items.map((item, index) => {\n  const d = item.json;\n\n  // Validate\n  if (!d.search_topic && !d.record_id) return null;\n\n  // Normalize topic\n  const topic = (d.search_topic || 'unknown')\n    .toLowerCase().trim();\n\n  // Normalize URL\n  let url = (d.profile_url || '').trim();\n  if (url && !url.startsWith('https://')) {\n    url = 'https://' + url;\n  }\n\n  // Extract username from URL\n  const username = url\n    .replace(/https?:\\/\\/(www\\.)?instagram\\.com\\//,'')\n    .replace(/\\//g,'')\n    .trim() || `competitor_${index}`;\n\n  return {\n    json: {\n      record_id: d.record_id || `REC-${Date.now()}`,\n      search_topic: topic,\n      profile_url: url,\n      username: username,\n      title: d.title || `${topic} competitor`,\n      snippet: d.body || 'Competitor in ' + topic,\n      timestamp: new Date().toISOString()\n    }\n  };\n}).filter(Boolean);"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        816,
+        -64
+      ],
+      "id": "0bc7c6db-4ab1-4496-94f2-2e54b31996e2",
+      "name": "Code in JavaScript1"
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "10WJqySx81150DfJpGXkx4U4_NA8HEcltg-ulXm6Sl0o",
+          "mode": "list",
+          "cachedResultName": "Competition List Agent",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/10WJqySx81150DfJpGXkx4U4_NA8HEcltg-ulXm6Sl0o/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Search Results",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/10WJqySx81150DfJpGXkx4U4_NA8HEcltg-ulXm6Sl0o/edit#gid=0"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "record_id": "={{ $json.record_id }}",
+            "search_topic": "={{ $json.search_topic }}",
+            "title": "={{ $json.title }}",
+            "url": "={{ $json.profile_url }}",
+            "snippet": "={{ $json.snippet }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "record_id",
+              "displayName": "record_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "search_topic",
+              "displayName": "search_topic",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "title",
+              "displayName": "title",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "url",
+              "displayName": "url",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "snippet",
+              "displayName": "snippet",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        1040,
+        -64
+      ],
+      "id": "398bd9cf-af27-4a94-9727-fde94b581b66",
+      "name": "Append row in sheet",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "p29c8vZBT44DvNDB",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        1264,
+        -64
+      ],
+      "id": "05ca364e-5cff-43c0-a86a-6985652a9825",
+      "name": "Loop Over Items"
+    },
+    {
+      "parameters": {
+        "actorId": {
+          "__rl": true,
+          "value": "bGApZ3CtTxA9fv2rl",
+          "mode": "list",
+          "cachedResultName": "🔥 Instagram Profile Scraper API (coderx/instagram-profile-scraper-api)",
+          "cachedResultUrl": "https://console.apify.com/actors/bGApZ3CtTxA9fv2rl/input"
+        },
+        "customBody": "={\n  \"usernames\": [\"{{ $('Code in JavaScript1').item.json.username }}\"],\n  \"resultsLimit\": 1\n} "
+      },
+      "type": "@apify/n8n-nodes-apify.apify",
+      "typeVersion": 1,
+      "position": [
+        1488,
+        -128
+      ],
+      "id": "039c3155-5240-4f0d-a108-bc3c35a4c562",
+      "name": "Run an Actor",
+      "credentials": {
+        "apifyApi": {
+          "id": "qB67GNW8iVG12JSd",
+          "name": "Apify account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "Datasets",
+        "datasetId": "={{ $json.defaultDatasetId }}",
+        "offset": {},
+        "options": {}
+      },
+      "type": "@apify/n8n-nodes-apify.apify",
+      "typeVersion": 1,
+      "position": [
+        1712,
+        -128
+      ],
+      "id": "36736df7-8311-43da-b8a3-77790ca94c22",
+      "name": "Get dataset items",
+      "credentials": {
+        "apifyApi": {
+          "id": "qB67GNW8iVG12JSd",
+          "name": "Apify account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all();\n\n// Safe fallback (no crash if node missing)\nlet original = {};\ntry {\n  original = $('Loop Over Items1').first()?.json || {};\n} catch (e) {\n  original = {};\n}\n\nreturn items.map(item => {\n  const d = item.json;\n\n  // ── BASIC DATA ──\n  const username = d.username || original.username || '';\n  const followers = d.followersCount || 0;\n  const posts = d.postsCount || 0;\n\n  // ── PROFILE URL ──\n  let profileUrl = d.url || original.profile_url || '';\n  if (profileUrl && !profileUrl.startsWith('http')) {\n    profileUrl = 'https://' + profileUrl;\n  }\n\n  // ── PROFILE IMAGE (HD preferred) ──\n  const profileImage =\n    d.hdProfilePicUrl ||\n    d.profilePicUrl ||\n    '';\n\n  // ── CATEGORY ──\n  const category = d.businessCategoryName || 'Not specified';\n\n  // ── ENGAGEMENT (from latest posts) 🔥 ──\n  let avgLikes = 0;\n  let avgComments = 0;\n\n  if (Array.isArray(d.latestPosts) && d.latestPosts.length > 0) {\n    const totalLikes = d.latestPosts.reduce((sum, p) => sum + (p.likesCount || 0), 0);\n    const totalComments = d.latestPosts.reduce((sum, p) => sum + (p.commentsCount || 0), 0);\n\n    avgLikes = Math.round(totalLikes / d.latestPosts.length);\n    avgComments = Math.round(totalComments / d.latestPosts.length);\n  }\n\n  // ── SCORING ──\n  let score = 0;\n\n  // Followers score\n  if (followers > 100000) score += 50;\n  else if (followers > 50000) score += 40;\n  else if (followers > 10000) score += 30;\n  else if (followers > 1000) score += 20;\n  else score += 10;\n\n  // Engagement score 🔥\n  if (avgLikes > 10000) score += 50;\n  else if (avgLikes > 2000) score += 30;\n  else if (avgLikes > 500) score += 20;\n  else score += 10;\n\n  const verified = d.verified || false;\n\n  // ── DUP KEY ──\n  const dupKey = `insta_${username.toLowerCase().trim()}`;\n\n  return {\n    json: {\n      record_id: original.record_id || `REC-${Date.now()}`,\n      username: username,\n      profile_url: profileUrl,\n      profile_image: profileImage, // ✅ new\n      category: category, // ✅ new\n      followers: followers,\n      posts: posts,\n      avg_likes: avgLikes, // ✅ new\n      avg_comments: avgComments, // ✅ new\n      verified: verified,\n      bio: (d.biography || '').substring(0, 200),\n      score: score,\n      search_topic: original.search_topic || '',\n      dup_key: dupKey,\n      timestamp: new Date().toISOString()\n    }\n  };\n});"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1936,
+        -128
+      ],
+      "id": "f0b0e1ff-c6d7-4d56-8f55-c67eef3e41ab",
+      "name": "Code in JavaScript2"
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "10WJqySx81150DfJpGXkx4U4_NA8HEcltg-ulXm6Sl0o",
+          "mode": "list",
+          "cachedResultName": "Competition List Agent",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/10WJqySx81150DfJpGXkx4U4_NA8HEcltg-ulXm6Sl0o/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": 1226248237,
+          "mode": "list",
+          "cachedResultName": "Prompt Engineering Competitors",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/10WJqySx81150DfJpGXkx4U4_NA8HEcltg-ulXm6Sl0o/edit#gid=1226248237"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "record_id": "={{ $json.record_id }}",
+            "username": "={{ $json.username }}",
+            "followers": "={{ $json.followers }}",
+            "bio": "={{ $json.bio }}",
+            "score": "={{ $json.score }}",
+            "timestamp": "={{ $json.timestamp }}",
+            "profile_url": "={{ $('Loop Over Items').item.json.url }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "record_id",
+              "displayName": "record_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "username",
+              "displayName": "username",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "profile_url",
+              "displayName": "profile_url",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "followers",
+              "displayName": "followers",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "bio",
+              "displayName": "bio",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "score",
+              "displayName": "score",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "timestamp",
+              "displayName": "timestamp",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        2160,
+        -64
+      ],
+      "id": "270074e4-021e-4580-a02b-e3163017f51f",
+      "name": "Append row in sheet1",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "p29c8vZBT44DvNDB",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        592,
+        240
+      ],
+      "id": "edb725fa-c5a8-4821-affd-83fe5e082eb7",
+      "name": "Merge1"
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all();\n\nreturn items.map((item, index) => {\n  const d = item.json;\n\n  // Validate\n  if (!d.search_topic && !d.record_id) return null;\n\n  // Normalize topic\n  const topic = (d.search_topic || 'unknown')\n    .toLowerCase().trim();\n\n  // Normalize URL\n  let url = (d.profile_url || '').trim();\n  if (url && !url.startsWith('https://')) {\n    url = 'https://' + url;\n  }\n\n  // Extract username from URL\n  const username = url\n    .replace(/https?:\\/\\/(www\\.)?instagram\\.com\\//,'')\n    .replace(/\\//g,'')\n    .trim() || `competitor_${index}`;\n\n  return {\n    json: {\n      record_id: d.record_id || `REC-${Date.now()}`,\n      search_topic: topic,\n      profile_url: url,\n      username: username,\n      title: d.title || `${topic} competitor`,\n      snippet: d.body || 'Competitor in ' + topic,\n      timestamp: new Date().toISOString()\n    }\n  };\n}).filter(Boolean);"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        816,
+        240
+      ],
+      "id": "f84d04fe-ccea-4a4e-b303-3e54caf05aef",
+      "name": "Code in JavaScript4"
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "10WJqySx81150DfJpGXkx4U4_NA8HEcltg-ulXm6Sl0o",
+          "mode": "list",
+          "cachedResultName": "Competition List Agent",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/10WJqySx81150DfJpGXkx4U4_NA8HEcltg-ulXm6Sl0o/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Search Results",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/10WJqySx81150DfJpGXkx4U4_NA8HEcltg-ulXm6Sl0o/edit#gid=0"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "record_id",
+              "displayName": "record_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "search_topic",
+              "displayName": "search_topic",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "title",
+              "displayName": "title",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "url",
+              "displayName": "url",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "snippet",
+              "displayName": "snippet",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        1040,
+        240
+      ],
+      "id": "016f2051-7714-440f-adde-19ba9df0879a",
+      "name": "Append row in sheet2",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "p29c8vZBT44DvNDB",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        1264,
+        240
+      ],
+      "id": "0d853448-d8e4-48ad-b6aa-eef2e23754e2",
+      "name": "Loop Over Items1"
+    },
+    {
+      "parameters": {
+        "actorId": {
+          "__rl": true,
+          "value": "bGApZ3CtTxA9fv2rl",
+          "mode": "list",
+          "cachedResultName": "🔥 Instagram Profile Scraper API (coderx/instagram-profile-scraper-api)",
+          "cachedResultUrl": "https://console.apify.com/actors/bGApZ3CtTxA9fv2rl/input"
+        },
+        "customBody": "{\n  \"usernames\": [\"{{ $('Code in JavaScript1').item.json.username }}\"],\n  \"resultsLimit\": 1\n}"
+      },
+      "type": "@apify/n8n-nodes-apify.apify",
+      "typeVersion": 1,
+      "position": [
+        1488,
+        160
+      ],
+      "id": "95456258-9af9-47e0-9918-54ddbd371e74",
+      "name": "Run an Actor1",
+      "credentials": {
+        "apifyApi": {
+          "id": "qB67GNW8iVG12JSd",
+          "name": "Apify account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "Datasets",
+        "datasetId": "={{ $json.defaultDatasetId }}",
+        "offset": {},
+        "options": {}
+      },
+      "type": "@apify/n8n-nodes-apify.apify",
+      "typeVersion": 1,
+      "position": [
+        1712,
+        160
+      ],
+      "id": "ab285e11-b706-4f9f-a4c1-69ca90177bf5",
+      "name": "Get dataset items1",
+      "credentials": {
+        "apifyApi": {
+          "id": "qB67GNW8iVG12JSd",
+          "name": "Apify account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all();\n\n// Safe fallback (no crash if node missing)\nlet original = {};\ntry {\n  original = $('Loop Over Items1').first()?.json || {};\n} catch (e) {\n  original = {};\n}\n\nreturn items.map(item => {\n  const d = item.json;\n\n  // ── BASIC DATA ──\n  const username = d.username || original.username || '';\n  const followers = d.followersCount || 0;\n  const posts = d.postsCount || 0;\n\n  // ── PROFILE URL ──\n  let profileUrl = d.url || original.profile_url || '';\n  if (profileUrl && !profileUrl.startsWith('http')) {\n    profileUrl = 'https://' + profileUrl;\n  }\n\n  // ── PROFILE IMAGE (HD preferred) ──\n  const profileImage =\n    d.hdProfilePicUrl ||\n    d.profilePicUrl ||\n    '';\n\n  // ── CATEGORY ──\n  const category = d.businessCategoryName || 'Not specified';\n\n  // ── ENGAGEMENT (from latest posts) 🔥 ──\n  let avgLikes = 0;\n  let avgComments = 0;\n\n  if (Array.isArray(d.latestPosts) && d.latestPosts.length > 0) {\n    const totalLikes = d.latestPosts.reduce((sum, p) => sum + (p.likesCount || 0), 0);\n    const totalComments = d.latestPosts.reduce((sum, p) => sum + (p.commentsCount || 0), 0);\n\n    avgLikes = Math.round(totalLikes / d.latestPosts.length);\n    avgComments = Math.round(totalComments / d.latestPosts.length);\n  }\n\n  // ── SCORING ──\n  let score = 0;\n\n  // Followers score\n  if (followers > 100000) score += 50;\n  else if (followers > 50000) score += 40;\n  else if (followers > 10000) score += 30;\n  else if (followers > 1000) score += 20;\n  else score += 10;\n\n  // Engagement score 🔥\n  if (avgLikes > 10000) score += 50;\n  else if (avgLikes > 2000) score += 30;\n  else if (avgLikes > 500) score += 20;\n  else score += 10;\n\n  const verified = d.verified || false;\n\n  // ── DUP KEY ──\n  const dupKey = `insta_${username.toLowerCase().trim()}`;\n\n  return {\n    json: {\n      record_id: original.record_id || `REC-${Date.now()}`,\n      username: username,\n      profile_url: profileUrl,\n      profile_image: profileImage, // ✅ new\n      category: category, // ✅ new\n      followers: followers,\n      posts: posts,\n      avg_likes: avgLikes, // ✅ new\n      avg_comments: avgComments, // ✅ new\n      verified: verified,\n      bio: (d.biography || '').substring(0, 200),\n      score: score,\n      search_topic: original.search_topic || '',\n      dup_key: dupKey,\n      timestamp: new Date().toISOString()\n    }\n  };\n});"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1936,
+        160
+      ],
+      "id": "daaa0d6c-31e6-4cfc-89c8-08afd86be634",
+      "name": "Code in JavaScript5"
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "10WJqySx81150DfJpGXkx4U4_NA8HEcltg-ulXm6Sl0o",
+          "mode": "list",
+          "cachedResultName": "Competition List Agent",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/10WJqySx81150DfJpGXkx4U4_NA8HEcltg-ulXm6Sl0o/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": 1226248237,
+          "mode": "list",
+          "cachedResultName": "Prompt Engineering Competitors",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/10WJqySx81150DfJpGXkx4U4_NA8HEcltg-ulXm6Sl0o/edit#gid=1226248237"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "record_id",
+              "displayName": "record_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "username",
+              "displayName": "username",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "profile_url",
+              "displayName": "profile_url",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "followers",
+              "displayName": "followers",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "bio",
+              "displayName": "bio",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "score",
+              "displayName": "score",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "timestamp",
+              "displayName": "timestamp",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        2160,
+        240
+      ],
+      "id": "288c0293-350c-4689-8335-d7b2620abaec",
+      "name": "Append row in sheet3",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "p29c8vZBT44DvNDB",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "url": "https://jsonplaceholder.typicode.com/posts",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "q",
+              "value": "={{ $json.search_query }}"
+            },
+            {
+              "name": "topic",
+              "value": "={{ $json.search_topic }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        368,
+        160
+      ],
+      "id": "2a5f95e5-9959-495e-acc8-825893dd14de",
+      "name": "power bi "
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        960,
+        736
+      ],
+      "id": "ff4c878e-cabb-44fc-9ccd-31ac83df4a86",
+      "name": "Merge2"
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all();\n\nreturn items.map((item, index) => {\n  const d = item.json;\n\n  // Validate\n  if (!d.search_topic && !d.record_id) return null;\n\n  // Normalize topic\n  const topic = (d.search_topic || 'unknown')\n    .toLowerCase().trim();\n\n  // Normalize URL\n  let url = (d.profile_url || '').trim();\n  if (url && !url.startsWith('https://')) {\n    url = 'https://' + url;\n  }\n\n  // Extract username from URL\n  const username = url\n    .replace(/https?:\\/\\/(www\\.)?instagram\\.com\\//,'')\n    .replace(/\\//g,'')\n    .trim() || `competitor_${index}`;\n\n  return {\n    json: {\n      record_id: d.record_id || `REC-${Date.now()}`,\n      search_topic: topic,\n      profile_url: url,\n      username: username,\n      title: d.title || `${topic} competitor`,\n      snippet: d.body || 'Competitor in ' + topic,\n      timestamp: new Date().toISOString()\n    }\n  };\n}).filter(Boolean);"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1184,
+        736
+      ],
+      "id": "258795f1-08d2-4af6-a861-fa67f12311fd",
+      "name": "Code in JavaScript6"
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "10WJqySx81150DfJpGXkx4U4_NA8HEcltg-ulXm6Sl0o",
+          "mode": "list",
+          "cachedResultName": "Competition List Agent",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/10WJqySx81150DfJpGXkx4U4_NA8HEcltg-ulXm6Sl0o/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Search Results",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/10WJqySx81150DfJpGXkx4U4_NA8HEcltg-ulXm6Sl0o/edit#gid=0"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "record_id": "={{ $json.record_id }}",
+            "search_topic": "={{ $json.search_topic }}",
+            "title": "={{ $json.title }}",
+            "url": "={{ $json.profile_url }}",
+            "snippet": "={{ $json.snippet }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "record_id",
+              "displayName": "record_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "search_topic",
+              "displayName": "search_topic",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "title",
+              "displayName": "title",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "url",
+              "displayName": "url",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "snippet",
+              "displayName": "snippet",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        1408,
+        736
+      ],
+      "id": "0e21079f-cd3e-442e-8cf3-6022ff33df3b",
+      "name": "Append row in sheet4",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "p29c8vZBT44DvNDB",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        1632,
+        736
+      ],
+      "id": "27dd7187-096d-4991-ad1d-e58e123dbf6c",
+      "name": "Loop Over Items2"
+    },
+    {
+      "parameters": {
+        "actorId": {
+          "__rl": true,
+          "value": "bGApZ3CtTxA9fv2rl",
+          "mode": "list",
+          "cachedResultName": "🔥 Instagram Profile Scraper API (coderx/instagram-profile-scraper-api)",
+          "cachedResultUrl": "https://console.apify.com/actors/bGApZ3CtTxA9fv2rl/input"
+        },
+        "customBody": "{\n  \"usernames\": [\"{{ $('Code in JavaScript1').item.json.username }}\"],\n  \"resultsLimit\": 1\n}"
+      },
+      "type": "@apify/n8n-nodes-apify.apify",
+      "typeVersion": 1,
+      "position": [
+        1856,
+        656
+      ],
+      "id": "d7fdbcf9-0547-4286-9540-cae47ccc34a8",
+      "name": "Run an Actor2",
+      "credentials": {
+        "apifyApi": {
+          "id": "qB67GNW8iVG12JSd",
+          "name": "Apify account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "Datasets",
+        "datasetId": "={{ $json.defaultDatasetId }}",
+        "offset": {},
+        "options": {}
+      },
+      "type": "@apify/n8n-nodes-apify.apify",
+      "typeVersion": 1,
+      "position": [
+        2080,
+        656
+      ],
+      "id": "27b69841-4051-402c-8c60-6df6722c3c07",
+      "name": "Get dataset items2",
+      "credentials": {
+        "apifyApi": {
+          "id": "qB67GNW8iVG12JSd",
+          "name": "Apify account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all();\n\n// Safe fallback (no crash if node missing)\nlet original = {};\ntry {\n  original = $('Loop Over Items1').first()?.json || {};\n} catch (e) {\n  original = {};\n}\n\nreturn items.map(item => {\n  const d = item.json;\n\n  // ── BASIC DATA ──\n  const username = d.username || original.username || '';\n  const followers = d.followersCount || 0;\n  const posts = d.postsCount || 0;\n\n  // ── PROFILE URL ──\n  let profileUrl = d.url || original.profile_url || '';\n  if (profileUrl && !profileUrl.startsWith('http')) {\n    profileUrl = 'https://' + profileUrl;\n  }\n\n  // ── PROFILE IMAGE (HD preferred) ──\n  const profileImage =\n    d.hdProfilePicUrl ||\n    d.profilePicUrl ||\n    '';\n\n  // ── CATEGORY ──\n  const category = d.businessCategoryName || 'Not specified';\n\n  // ── ENGAGEMENT (from latest posts) 🔥 ──\n  let avgLikes = 0;\n  let avgComments = 0;\n\n  if (Array.isArray(d.latestPosts) && d.latestPosts.length > 0) {\n    const totalLikes = d.latestPosts.reduce((sum, p) => sum + (p.likesCount || 0), 0);\n    const totalComments = d.latestPosts.reduce((sum, p) => sum + (p.commentsCount || 0), 0);\n\n    avgLikes = Math.round(totalLikes / d.latestPosts.length);\n    avgComments = Math.round(totalComments / d.latestPosts.length);\n  }\n\n  // ── SCORING ──\n  let score = 0;\n\n  // Followers score\n  if (followers > 100000) score += 50;\n  else if (followers > 50000) score += 40;\n  else if (followers > 10000) score += 30;\n  else if (followers > 1000) score += 20;\n  else score += 10;\n\n  // Engagement score 🔥\n  if (avgLikes > 10000) score += 50;\n  else if (avgLikes > 2000) score += 30;\n  else if (avgLikes > 500) score += 20;\n  else score += 10;\n\n  const verified = d.verified || false;\n\n  // ── DUP KEY ──\n  const dupKey = `insta_${username.toLowerCase().trim()}`;\n\n  return {\n    json: {\n      record_id: original.record_id || `REC-${Date.now()}`,\n      username: username,\n      profile_url: profileUrl,\n      profile_image: profileImage, // ✅ new\n      category: category, // ✅ new\n      followers: followers,\n      posts: posts,\n      avg_likes: avgLikes, // ✅ new\n      avg_comments: avgComments, // ✅ new\n      verified: verified,\n      bio: (d.biography || '').substring(0, 200),\n      score: score,\n      search_topic: original.search_topic || '',\n      dup_key: dupKey,\n      timestamp: new Date().toISOString()\n    }\n  };\n});"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2304,
+        656
+      ],
+      "id": "be81a1cb-7277-43b6-bc17-c959905522e9",
+      "name": "Code in JavaScript7"
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "10WJqySx81150DfJpGXkx4U4_NA8HEcltg-ulXm6Sl0o",
+          "mode": "list",
+          "cachedResultName": "Competition List Agent",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/10WJqySx81150DfJpGXkx4U4_NA8HEcltg-ulXm6Sl0o/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": 1226248237,
+          "mode": "list",
+          "cachedResultName": "Prompt Engineering Competitors",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/10WJqySx81150DfJpGXkx4U4_NA8HEcltg-ulXm6Sl0o/edit#gid=1226248237"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "record_id": "={{ $json.record_id }}",
+            "username": "={{ $json.username }}",
+            "profile_url": "={{ $json.profile_url }}",
+            "followers": "={{ $json.followers }}",
+            "bio": "={{ $json.score }}",
+            "score": "={{ $json.bio }}",
+            "timestamp": "={{ $json.timestamp }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "record_id",
+              "displayName": "record_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "username",
+              "displayName": "username",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "profile_url",
+              "displayName": "profile_url",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "followers",
+              "displayName": "followers",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "bio",
+              "displayName": "bio",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "score",
+              "displayName": "score",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "timestamp",
+              "displayName": "timestamp",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        2528,
+        736
+      ],
+      "id": "60b4e884-8a4a-4634-9ba2-a9e1dcd91049",
+      "name": "Append row in sheet5",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "p29c8vZBT44DvNDB",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "url": "https://jsonplaceholder.typicode.com/posts",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "q",
+              "value": "={{ $json.search_query }}"
+            },
+            {
+              "name": "topic",
+              "value": "={{ $json.search_topic }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        736,
+        736
+      ],
+      "id": "d52e1f74-3ec0-466f-890a-2dcefa2add15",
+      "name": "Lead generation"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "When clicking ‘Execute workflow’": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 1
+          },
+          {
+            "node": "power bi ",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Merge1",
+            "type": "main",
+            "index": 1
+          },
+          {
+            "node": "Lead generation",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Merge2",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "HTTP Request": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript1": {
+      "main": [
+        [
+          {
+            "node": "Append row in sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Append row in sheet": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Loop Over Items": {
+      "main": [
+        [],
+        [
+          {
+            "node": "Run an Actor",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run an Actor": {
+      "main": [
+        [
+          {
+            "node": "Get dataset items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get dataset items": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript2": {
+      "main": [
+        [
+          {
+            "node": "Append row in sheet1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Append row in sheet1": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge1": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript4",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript4": {
+      "main": [
+        [
+          {
+            "node": "Append row in sheet2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Append row in sheet2": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Items1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Loop Over Items1": {
+      "main": [
+        [],
+        [
+          {
+            "node": "Run an Actor1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run an Actor1": {
+      "main": [
+        [
+          {
+            "node": "Get dataset items1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get dataset items1": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript5",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript5": {
+      "main": [
+        [
+          {
+            "node": "Append row in sheet3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Append row in sheet3": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Items1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "power bi ": {
+      "main": [
+        [
+          {
+            "node": "Merge1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge2": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript6",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript6": {
+      "main": [
+        [
+          {
+            "node": "Append row in sheet4",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Append row in sheet4": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Items2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Loop Over Items2": {
+      "main": [
+        [],
+        [
+          {
+            "node": "Run an Actor2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run an Actor2": {
+      "main": [
+        [
+          {
+            "node": "Get dataset items2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get dataset items2": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript7",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript7": {
+      "main": [
+        [
+          {
+            "node": "Append row in sheet5",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Append row in sheet5": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Items2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Lead generation": {
+      "main": [
+        [
+          {
+            "node": "Merge2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "34f9d559-b0d4-48aa-8881-a89cb9760fff",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "dfa9bd419da97e8a72d6069acb67e95575c89baa71302d0781a7331301986176"
+  },
+  "id": "GtnJxawNF9LjGKwy",
+  "tags": []
+}
