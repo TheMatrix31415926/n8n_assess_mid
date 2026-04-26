@@ -1,0 +1,450 @@
+{
+  "name": "assess 19 n8n_mid",
+  "nodes": [
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "id": "f0799053-87a2-4dcc-a80c-357680bc3ce2",
+      "name": "When clicking ‘Execute workflow’"
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "1hHuFJNJFz4i11ANwfFdJtcWrlxF6dTPjlSFdDXz9C3M",
+          "mode": "list",
+          "cachedResultName": "Product Partner Companies",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1hHuFJNJFz4i11ANwfFdJtcWrlxF6dTPjlSFdDXz9C3M/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Partner Source",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1hHuFJNJFz4i11ANwfFdJtcWrlxF6dTPjlSFdDXz9C3M/edit#gid=0"
+        },
+        "filtersUI": {
+          "values": [
+            {
+              "lookupColumn": "status",
+              "lookupValue": "new"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        208,
+        0
+      ],
+      "id": "3bbd9da6-def4-4b6d-b9a8-7b58b8ead8a0",
+      "name": "Get row(s) in sheet",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "p29c8vZBT44DvNDB",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        416,
+        0
+      ],
+      "id": "15c1c7f5-5467-41c6-b093-1b9d356fda9c",
+      "name": "Loop Over Items"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Research this company and extract partner information:\n\nCompany Name: {{ $json.company_name }}\nIndustry: {{ $json.industry }}\nProfile URL: {{ $json.profile_url }}\nRecord ID: {{ $json.record_id }}\n\nReturn ONLY this exact JSON structure:\n{\n  \"record_id\": \"{{ $json.record_id }}\",\n  \"company_name\": \"{{ $json.company_name }}\",\n  \"partner_type\": \"Technology|Reseller|Integration|Referral\",\n  \"website\": \"https://company-website.com\",\n  \"contact_email\": \"partnerships@company.com\",\n  \"industry\": \"{{ $json.industry }}\",\n  \"key_products\": \"Product1, Product2\",\n  \"partnership_potential\": \"High|Medium|Low\",\n  \"notes\": \"One line about why they are a good partner\"\n}",
+        "options": {
+          "systemMessage": "You are a business research assistant specializing \nin B2B partner companies.\nAlways respond with ONLY a raw JSON object.\nNo markdown, no backticks, no explanation.\nStart with { and end with }"
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        640,
+        128
+      ],
+      "id": "474f0099-77f5-4279-9fc2-f9857f7fe077",
+      "name": "AI Agent"
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "value": "gpt-4o-mini",
+          "mode": "list",
+          "cachedResultName": "gpt-4o-mini"
+        },
+        "builtInTools": {},
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.3,
+      "position": [
+        576,
+        368
+      ],
+      "id": "062cc0a8-813c-402a-b5ae-028b6afb62b8",
+      "name": "OpenAI Chat Model",
+      "credentials": {
+        "openAiApi": {
+          "id": "X6yz5KIllfL8AWsR",
+          "name": "OpenAI account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const item = $input.first();\nconst original = $('Loop Over Items').first().json;\n\n// Get AI output\nlet rawOutput = item.json.output || '';\nlet partnerData = {};\n\ntry {\n  // Clean markdown if present\n  if (typeof rawOutput === 'string') {\n    rawOutput = rawOutput\n      .replace(/```json/gi, '')\n      .replace(/```/g, '')\n      .trim();\n\n    // Extract JSON object\n    const start = rawOutput.indexOf('{');\n    const end = rawOutput.lastIndexOf('}');\n\n    if (start !== -1 && end !== -1) {\n      partnerData = JSON.parse(\n        rawOutput.substring(start, end + 1)\n      );\n    }\n  } else if (typeof rawOutput === 'object') {\n    partnerData = rawOutput;\n  }\n} catch(e) {\n  // Return safe error record\n  return [{\n    json: {\n      record_id: original.record_id,\n      company_name: original.company_name,\n      error: true,\n      message: 'AI parse failed: ' + e.message,\n      skip: true\n    }\n  }];\n}\n\n// Validate required fields\nif (!partnerData.company_name || \n    !partnerData.partner_type) {\n  return [{\n    json: {\n      record_id: original.record_id,\n      company_name: original.company_name,\n      error: true,\n      message: 'Incomplete AI response',\n      skip: true\n    }\n  }];\n}\n\n// Normalize website URL\nlet website = (partnerData.website || '').trim();\nif (website && !website.startsWith('https://')) {\n  website = 'https://' + website;\n}\n\n// Normalize email\nconst email = (partnerData.contact_email || '')\n  .toLowerCase().trim();\n\n// Normalize partner type\nconst validTypes = [\n  'Technology', 'Reseller', \n  'Integration', 'Referral'\n];\nlet partnerType = (partnerData.partner_type || '')\n  .trim();\nif (!validTypes.includes(partnerType)) {\n  partnerType = 'Technology';\n}\n\n// Normalize potential\nconst validPotential = ['High', 'Medium', 'Low'];\nlet potential = (\n  partnerData.partnership_potential || 'Medium'\n).trim();\nif (!validPotential.includes(potential)) {\n  potential = 'Medium';\n}\n\n// Generate mock Acumatica reference\nconst acuRef = 'ACU-PART-' + Date.now();\n\nreturn [{\n  json: {\n    record_id: original.record_id,\n    company_name: partnerData.company_name,\n    partner_type: partnerType,\n    website: website,\n    contact_email: email,\n    industry: partnerData.industry || \n              original.industry,\n    key_products: partnerData.key_products || '',\n    partnership_potential: potential,\n    notes: partnerData.notes || '',\n    acumatica_ref: acuRef,\n    skip: false,\n    processed_at: new Date().toISOString()\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        992,
+        128
+      ],
+      "id": "410cd096-a13b-4fe5-8a30-eb4114cbe7f0",
+      "name": "Code in JavaScript"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "7d4655fc-47f0-47ac-95bc-abced2daedb0",
+              "leftValue": "={{ $json.skip }}",
+              "rightValue": "false",
+              "operator": {
+                "type": "string",
+                "operation": "equals",
+                "name": "filter.operator.equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        1200,
+        128
+      ],
+      "id": "26fab596-60fb-43c1-aeda-aad8a70cd203",
+      "name": "If"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://jsonplaceholder.typicode.com/posts",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"PartnerID\": \"{{ $json.record_id }}\",\n  \"CompanyName\": \"{{ $json.company_name }}\",\n  \"PartnerType\": \"{{ $json.partner_type }}\",\n  \"Website\": \"{{ $json.website }}\",\n  \"Email\": \"{{ $json.contact_email }}\",\n  \"Industry\": \"{{ $json.industry }}\",\n  \"Status\": \"Active\"\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        1424,
+        112
+      ],
+      "id": "62aa1455-d539-493b-bcd9-70b4681360a4",
+      "name": "HTTP Request"
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "1hHuFJNJFz4i11ANwfFdJtcWrlxF6dTPjlSFdDXz9C3M",
+          "mode": "list",
+          "cachedResultName": "Product Partner Companies",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1hHuFJNJFz4i11ANwfFdJtcWrlxF6dTPjlSFdDXz9C3M/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": 180802050,
+          "mode": "list",
+          "cachedResultName": "Partner Results",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1hHuFJNJFz4i11ANwfFdJtcWrlxF6dTPjlSFdDXz9C3M/edit#gid=180802050"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "record_id": "={{ $json.id }}",
+            "company_name": "={{ $json.CompanyName }}",
+            "partner_type": "={{ $json.PartnerType }}",
+            "website": "={{ $json.Website }}",
+            "contact_email": "={{ $json.Email }}",
+            "industry": "={{ $json.Industry }}",
+            "timestamp": "={{ $now }}",
+            "acumatica_ref": "={{ $json.PartnerID }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "record_id",
+              "displayName": "record_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "company_name",
+              "displayName": "company_name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "partner_type",
+              "displayName": "partner_type",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "website",
+              "displayName": "website",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "contact_email",
+              "displayName": "contact_email",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "industry",
+              "displayName": "industry",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "acumatica_ref",
+              "displayName": "acumatica_ref",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "timestamp",
+              "displayName": "timestamp",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        1616,
+        112
+      ],
+      "id": "a6a8ab5e-bf16-48c3-b87f-1b94fb922dab",
+      "name": "Append row in sheet",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "p29c8vZBT44DvNDB",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE partner_companies\nSET status = 'processed',\n    processed = TRUE,\n    acumatica_ref = '{{ $json.acumatica_ref }}',\n    partner_type = '{{ $json.partner_type }}',\n    website = '{{ $json.website }}',\n    contact_email = '{{ $json.contact_email }}'\nWHERE record_id = '{{ $json.record_id }}';\n\n\nINSERT INTO partner_log\n(record_id, company_name, action, \n result, acumatica_ref, message)\nVALUES (\n  '{{ $json.record_id }}',\n  '{{ $json.company_name }}',\n  'partner_sync',\n  'success',\n  '{{ $json.acumatica_ref }}',\n  'Type: {{ $json.partner_type }} | Potential: {{ $json.partnership_potential }}'\n);",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        1888,
+        272
+      ],
+      "id": "6cc3f0bf-2b94-4098-b8da-5551d8add6a8",
+      "name": "Execute a SQL query",
+      "credentials": {
+        "postgres": {
+          "id": "Pz5LiQSqb8EQE2AD",
+          "name": "Postgres account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "When clicking ‘Execute workflow’": {
+      "main": [
+        [
+          {
+            "node": "Get row(s) in sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get row(s) in sheet": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Loop Over Items": {
+      "main": [
+        [],
+        [
+          {
+            "node": "AI Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Agent": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript": {
+      "main": [
+        [
+          {
+            "node": "If",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request": {
+      "main": [
+        [
+          {
+            "node": "Append row in sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Append row in sheet": {
+      "main": [
+        [
+          {
+            "node": "Execute a SQL query",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute a SQL query": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "c9de09c7-9f88-448b-b217-2d3a8b0794da",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "dfa9bd419da97e8a72d6069acb67e95575c89baa71302d0781a7331301986176"
+  },
+  "id": "3MgifCBcy0QBAPP5",
+  "tags": []
+}
