@@ -1,0 +1,357 @@
+{
+  "name": "assess 22 n8n_mid",
+  "nodes": [
+    {
+      "parameters": {
+        "pollTimes": {
+          "item": [
+            {
+              "mode": "everyMinute"
+            }
+          ]
+        },
+        "feedUrl": "https://www.acumatica.com/feed/"
+      },
+      "type": "n8n-nodes-base.rssFeedReadTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "id": "3bf5a669-1c60-401f-9962-a2c660d2abe3",
+      "name": "RSS Feed Trigger"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        208,
+        0
+      ],
+      "id": "4fadcdb6-e98e-4d00-a8c3-0ce6658e67fa",
+      "name": "Loop Over Items"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Extract event information from this RSS feed item:\n\nTitle: {{ $json.title }}\nContent: {{ $json.content || $json.summary || $json.description }}\nLink: {{ $json.link }}\nPublished: {{ $json.pubDate || $json.isoDate }}\n\nReturn ONLY this exact JSON:\n{\n  \"event_title\": \"Full event title here\",\n  \"event_date\": \"YYYY-MM-DD or date string\",\n  \"location\": \"City, Country or Online\",\n  \"description\": \"2-3 sentence summary\",\n  \"event_url\": \"https://event-url.com\",\n  \"event_type\": \"Summit|Webinar|Workshop|Conference|Other\",\n  \"is_upcoming\": true,\n  \"relevance_score\": 85\n}",
+        "options": {
+          "systemMessage": "You are an event information extraction specialist \nfor Acumatica events and announcements.\n\nExtract structured event details from RSS feed items.\nAlways respond with ONLY raw JSON.\nNo markdown, no backticks.\nStart with { and end with }"
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        416,
+        208
+      ],
+      "id": "25945937-5837-41a6-8860-d2ef3733e918",
+      "name": "AI Agent"
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "value": "gpt-4o-mini",
+          "mode": "list",
+          "cachedResultName": "gpt-4o-mini"
+        },
+        "builtInTools": {},
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.3,
+      "position": [
+        288,
+        416
+      ],
+      "id": "aa48cd77-6f0b-4b27-b385-5cf4f4f6a8f9",
+      "name": "OpenAI Chat Model",
+      "credentials": {
+        "openAiApi": {
+          "id": "X6yz5KIllfL8AWsR",
+          "name": "OpenAI account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const item = $input.first();\nconst original = $('Loop Over Items').first().json;\n\n// Generate unique message ID from RSS item\nconst messageId = 'MSG-' + \n  (original.guid || original.link || Date.now())\n  .toString()\n  .replace(/[^a-zA-Z0-9]/g, '')\n  .substring(0, 10);\n\n// Get AI output\nlet rawOutput = item.json.output || '';\nlet eventData = {};\n\ntry {\n  if (typeof rawOutput === 'string') {\n    rawOutput = rawOutput\n      .replace(/```json/gi, '')\n      .replace(/```/g, '')\n      .trim();\n\n    const start = rawOutput.indexOf('{');\n    const end = rawOutput.lastIndexOf('}');\n\n    if (start !== -1 && end !== -1) {\n      eventData = JSON.parse(\n        rawOutput.substring(start, end + 1)\n      );\n    }\n  } else if (typeof rawOutput === 'object') {\n    eventData = rawOutput;\n  }\n} catch(e) {\n  // Safe fallback using RSS data directly\n  eventData = {\n    event_title: original.title || 'Unknown Event',\n    event_date: original.pubDate || \n                new Date().toISOString(),\n    location: 'Online',\n    description: original.summary || \n                 original.content || '',\n    event_url: original.link || '',\n    event_type: 'Other',\n    is_upcoming: true,\n    relevance_score: 50\n  };\n}\n\n// Validate required fields\nif (!eventData.event_title) {\n  return [{\n    json: {\n      error: true,\n      message: 'No event title extracted',\n      message_id: messageId,\n      skip: true\n    }\n  }];\n}\n\n// Normalize event URL\nlet eventUrl = (eventData.event_url || \n                original.link || '').trim();\nif (eventUrl && !eventUrl.startsWith('https://')) {\n  eventUrl = 'https://' + eventUrl;\n}\n\n// Normalize event type\nconst validTypes = [\n  'Summit', 'Webinar', 'Workshop',\n  'Conference', 'Other'\n];\nlet eventType = (eventData.event_type || 'Other')\n  .trim();\nif (!validTypes.includes(eventType)) {\n  eventType = 'Other';\n}\n\n// Normalize relevance score\nlet score = parseInt(eventData.relevance_score) || 50;\nif (score > 100) score = 100;\nif (score < 0) score = 0;\n\n// Clean description\nconst description = (eventData.description || '')\n  .substring(0, 500)\n  .replace(/\\n+/g, ' ')\n  .trim();\n\nreturn [{\n  json: {\n    message_id: messageId,\n    event_title: eventData.event_title\n      .substring(0, 200),\n    event_date: eventData.event_date || 'TBD',\n    location: eventData.location || 'Online',\n    description: description,\n    event_url: eventUrl,\n    event_type: eventType,\n    is_upcoming: eventData.is_upcoming !== false,\n    relevance_score: score,\n    source_feed: original.link || '',\n    error: false,\n    skip: false,\n    processed_at: new Date().toISOString()\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        768,
+        208
+      ],
+      "id": "181b288f-accc-4ca1-bc35-85d505187bf9",
+      "name": "Code in JavaScript"
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "1Mqpowi2StD7TVBpkDEgv82_vVCrYW6nVVbAWk0-6YlM",
+          "mode": "list",
+          "cachedResultName": "Acumatica Updated events",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1Mqpowi2StD7TVBpkDEgv82_vVCrYW6nVVbAWk0-6YlM/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "events",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1Mqpowi2StD7TVBpkDEgv82_vVCrYW6nVVbAWk0-6YlM/edit#gid=0"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "message_id": "={{ $json.message_id }}",
+            "event_title": "={{ $json.event_title }}",
+            "event_date": "={{ $json.event_date }}",
+            "location": "={{ $json.location }}",
+            "description": "={{ $json.description }}",
+            "url": "={{ $json.event_url }}",
+            "timestamp": "={{ $json.processed_at }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "message_id",
+              "displayName": "message_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "event_title",
+              "displayName": "event_title",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "event_date",
+              "displayName": "event_date",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "location",
+              "displayName": "location",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "description",
+              "displayName": "description",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "url",
+              "displayName": "url",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "timestamp",
+              "displayName": "timestamp",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        976,
+        208
+      ],
+      "id": "f99afeb7-4c0e-44b2-8f1b-2360d819119e",
+      "name": "Append row in sheet",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "p29c8vZBT44DvNDB",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "sendTo": "dewanshu9004@gmail.com",
+        "subject": "=🗓️ New Acumatica Event: {{ $json.event_title }}",
+        "emailType": "text",
+        "message": "=New Acumatica Upcoming Event Detected!  Event: {{ $json.event_title }} Date: {{ $json.event_date }} Location: {{ $json.location }} Type: {{ $json.event_type }}  Description: {{ $json.description }}  Learn More: {{ $json.event_url }}  Relevance Score: {{ $json.relevance_score }}/100  --- Processed at: {{ $json.processed_at }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        1184,
+        208
+      ],
+      "id": "e24621a8-9175-406f-aea2-e6aab0a0a4ff",
+      "name": "Send a message",
+      "webhookId": "495e3c27-2932-4f79-9e9c-a152d70dcd97",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "KCDKXdYXOHRPfdIs",
+          "name": "Gmail account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO acumatica_events\n(message_id, from_email, subject,\n event_title, event_date, location,\n description, event_url, status, processed)\nVALUES (\n  '{{ $json.message_id }}',\n  'events@acumatica.com',\n  '{{ $json.event_title }}',\n  '{{ $json.event_title }}',\n  '{{ $json.event_date }}',\n  '{{ $json.location }}',\n  '{{ $json.description }}',\n  '{{ $json.event_url }}',\n  'processed',\n  TRUE\n)\nON CONFLICT (message_id)\nDO UPDATE SET\n  status = 'processed',\n  processed = TRUE;\n\n\n\nINSERT INTO event_log\n(message_id, event_title, action, \n result, message)\nVALUES (\n  '{{ $json.message_id }}',\n  '{{ $json.event_title }}',\n  'event_extraction',\n  'success',\n  'Type: {{ $json.event_type }} | Score: {{ $json.relevance_score }}'\n);",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        1392,
+        208
+      ],
+      "id": "6923005d-438c-41f4-b1a7-7afc62591fa9",
+      "name": "Execute a SQL query",
+      "credentials": {
+        "postgres": {
+          "id": "Pz5LiQSqb8EQE2AD",
+          "name": "Postgres account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "RSS Feed Trigger": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Loop Over Items": {
+      "main": [
+        [],
+        [
+          {
+            "node": "AI Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Agent": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript": {
+      "main": [
+        [
+          {
+            "node": "Append row in sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Append row in sheet": {
+      "main": [
+        [
+          {
+            "node": "Send a message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send a message": {
+      "main": [
+        [
+          {
+            "node": "Execute a SQL query",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute a SQL query": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "16114d5d-2f9c-46a5-a151-38f222c00bb7",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "dfa9bd419da97e8a72d6069acb67e95575c89baa71302d0781a7331301986176"
+  },
+  "id": "R76dRidoklmnFdsi",
+  "tags": []
+}
