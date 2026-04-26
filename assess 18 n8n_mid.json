@@ -1,0 +1,376 @@
+{
+  "name": "assess 18 n8n_mid",
+  "nodes": [
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "id": "c68ddba8-9f9d-40b0-bd53-9bd3f0a22937",
+      "name": "When clicking ‘Execute workflow’"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT\n    e.record_id,\n    e.profile_url,\n    e.first_name,\n    e.last_name,\n    e.email,\n    e.phone,\n    e.department,\n    e.job_title,\n    e.employee_id,\n    e.status,\n    e.created_at,\n    -- Duplicate check inline\n    COUNT(*) OVER (\n        PARTITION BY e.email\n    ) as email_count,\n    ROW_NUMBER() OVER (\n        PARTITION BY e.email\n        ORDER BY e.created_at ASC\n    ) as row_num\nFROM acumatica_employees e\nWHERE e.status = 'new'\nAND e.synced = FALSE\nORDER BY e.created_at ASC;",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        208,
+        0
+      ],
+      "id": "95189c16-9224-4766-a061-be964b2a7ad7",
+      "name": "Execute a SQL query",
+      "credentials": {
+        "postgres": {
+          "id": "Pz5LiQSqb8EQE2AD",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all();\nconst results = [];\n\nfor (const item of items) {\n  const d = item.json;\n\n  // Skip duplicates — only process first occurrence\n  if (parseInt(d.row_num) > 1) {\n    results.push({\n      json: {\n        record_id: d.record_id,\n        full_name: `${d.first_name} ${d.last_name}`,\n        action: 'skipped',\n        result: 'duplicate',\n        message: 'Duplicate email: ' + d.email,\n        skip: true\n      }\n    });\n    continue;\n  }\n\n  // Validate required fields\n  const missing = [];\n  if (!d.first_name) missing.push('first_name');\n  if (!d.last_name)  missing.push('last_name');\n  if (!d.email)      missing.push('email');\n  if (!d.employee_id) missing.push('employee_id');\n\n  if (missing.length > 0) {\n    results.push({\n      json: {\n        record_id: d.record_id,\n        full_name: `${d.first_name || ''} ${d.last_name || ''}`.trim(),\n        action: 'validation',\n        result: 'invalid',\n        message: 'Missing: ' + missing.join(', '),\n        skip: true\n      }\n    });\n    continue;\n  }\n\n  // Normalize email\n  const email = (d.email || '').toLowerCase().trim();\n\n  // Normalize phone\n  let phone = (d.phone || '').replace(/\\s+/g, '');\n  if (phone && !phone.startsWith('+')) {\n    phone = '+' + phone;\n  }\n\n  // Normalize name — title case\n  const firstName = (d.first_name || '')\n    .trim()\n    .charAt(0).toUpperCase() +\n    (d.first_name || '').trim().slice(1).toLowerCase();\n\n  const lastName = (d.last_name || '')\n    .trim()\n    .charAt(0).toUpperCase() +\n    (d.last_name || '').trim().slice(1).toLowerCase();\n\n  // Normalize profile URL\n  let profileUrl = (d.profile_url || '').trim();\n  if (profileUrl && !profileUrl.startsWith('https://')) {\n    profileUrl = 'https://' + profileUrl;\n  }\n\n  // Reshape for Acumatica format\n  results.push({\n    json: {\n      record_id: d.record_id,\n      employee_id: d.employee_id,\n      first_name: firstName,\n      last_name: lastName,\n      full_name: `${firstName} ${lastName}`,\n      email: email,\n      phone: phone,\n      department: d.department || 'General',\n      job_title: d.job_title || 'Employee',\n      profile_url: profileUrl,\n      // Acumatica formatted payload\n      acumatica_payload: {\n        EmployeeID: { value: d.employee_id },\n        Name: { value: `${firstName} ${lastName}` },\n        Email: { value: email },\n        Phone: { value: phone },\n        Department: { value: d.department },\n        Position: { value: d.job_title },\n        Status: { value: 'Active' }\n      },\n      skip: false,\n      processed_at: new Date().toISOString()\n    }\n  });\n}\n\nreturn results;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        416,
+        0
+      ],
+      "id": "be0f4570-ef32-4435-8f4c-0272a0fbd1cc",
+      "name": "Code in JavaScript"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "750f7054-a148-4a4c-a828-e527031ba772",
+              "leftValue": "={{ $json.skip }}",
+              "rightValue": "false",
+              "operator": {
+                "type": "string",
+                "operation": "equals",
+                "name": "filter.operator.equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        624,
+        0
+      ],
+      "id": "eebbca3e-7441-4d7f-abb9-0eb8e3909eba",
+      "name": "If"
+    },
+    {
+      "parameters": {
+        "url": "https://jsonplaceholder.typicode.com/posts",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "{\n  \"name\": \"admin\",\n  \"password\": \"admin123\",\n  \"company\": \"AcumaticaDemo\",\n  \"action\": \"login\"\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        848,
+        -128
+      ],
+      "id": "ac3cadef-6da0-4893-b4fc-5162b986c65d",
+      "name": "Acumatica Login"
+    },
+    {
+      "parameters": {
+        "amount": 2
+      },
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        1056,
+        -128
+      ],
+      "id": "143342f2-a117-4850-8582-fbce0fee4dd1",
+      "name": "Wait",
+      "webhookId": "33b15821-14aa-4554-97ea-9f459217bf97"
+    },
+    {
+      "parameters": {
+        "method": "PUT",
+        "url": "https://jsonplaceholder.typicode.com/posts/1",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ $('If').item.json.acumatica_payload }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        1264,
+        -128
+      ],
+      "id": "f56c6a18-dc75-4b13-ad44-766ff7a8545d",
+      "name": "Acumatica Employee PUT"
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all();\n\n// Safe fallback for original node\nlet original = {};\ntry {\n  original = $('Validate and Reshape').first()?.json || {};\n} catch (e) {\n  original = {};\n}\n\nreturn items.map(item => {\n  const d = item.json;\n\n  // Extract values safely from Acumatica-style response\n  const employeeId = d.EmployeeID?.value || original.employee_id || '';\n  const name = d.Name?.value || original.full_name || '';\n  const email = d.Email?.value || original.email || '';\n  const phone = d.Phone?.value || '';\n  const department = d.Department?.value || original.department || '';\n  const position = d.Position?.value || original.job_title || '';\n  const status = d.Status?.value || 'Unknown';\n\n  // Success check\n  const isSuccess = d.id !== undefined;\n\n  // Generate reference\n  const acuRef = isSuccess\n    ? `ACU-${d.id || Date.now()}`\n    : null;\n\n  return {\n    json: {\n      record_id: original.record_id || `REC-${Date.now()}`,\n      employee_id: employeeId,\n      full_name: name,\n      email: email,\n      phone: phone,\n      department: department,\n      job_title: position,\n      status: status,\n\n      // Sync info\n      acumatica_ref: acuRef,\n      sync_status: isSuccess ? 'synced' : 'failed',\n      error: isSuccess ? '' : 'Acumatica call failed',\n\n      synced_at: new Date().toISOString()\n    }\n  };\n});"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1472,
+        -128
+      ],
+      "id": "cb227ff3-8add-4edd-b3e0-50a31a663842",
+      "name": "Code in JavaScript1"
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "1zqZWkr7aS5nuNowXFtOoq_IQtOHCT4AWVSgY3vp_j1E",
+          "mode": "list",
+          "cachedResultName": "Acumatica Employee Sync",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1zqZWkr7aS5nuNowXFtOoq_IQtOHCT4AWVSgY3vp_j1E/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": 1097147764,
+          "mode": "list",
+          "cachedResultName": "Sync Log",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1zqZWkr7aS5nuNowXFtOoq_IQtOHCT4AWVSgY3vp_j1E/edit#gid=1097147764"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "record_id": "={{ $json.record_id }}",
+            "full_name": "={{ $json.full_name }}",
+            "timestamp": "={{ $json.synced_at }}",
+            "action": "={{ $json.status }}",
+            "result": "={{ $json.sync_status }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "record_id",
+              "displayName": "record_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "full_name",
+              "displayName": "full_name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "action",
+              "displayName": "action",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "result",
+              "displayName": "result",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "timestamp",
+              "displayName": "timestamp",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        1680,
+        -128
+      ],
+      "id": "f5b5ae2a-c3cb-4813-b83c-bcc401fbeb0f",
+      "name": "Append row in sheet",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "p29c8vZBT44DvNDB",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE acumatica_employees\nSET status = 'synced',\n    synced = TRUE,\n    acumatica_ref = '{{ $json.acumatica_ref }}'\nWHERE record_id = '{{ $json.record_id }}';\n\n\nINSERT INTO acumatica_sync_log\n(record_id, employee_id, full_name,\n action, result, acumatica_ref, message)\nVALUES (\n  '{{ $json.record_id }}',\n  '{{ $json.employee_id }}',\n  '{{ $json.full_name }}',\n  'employee_sync',\n  '{{ $json.sync_status }}',\n  '{{ $json.acumatica_ref }}',\n  'Synced at {{ $json.synced_at }}'\n);",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        1888,
+        -125
+      ],
+      "id": "526ab9ad-a971-47f9-a0a9-737eac25e63a",
+      "name": "Execute a SQL query1",
+      "credentials": {
+        "postgres": {
+          "id": "Pz5LiQSqb8EQE2AD",
+          "name": "Postgres account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "When clicking ‘Execute workflow’": {
+      "main": [
+        [
+          {
+            "node": "Execute a SQL query",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute a SQL query": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript": {
+      "main": [
+        [
+          {
+            "node": "If",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If": {
+      "main": [
+        [
+          {
+            "node": "Acumatica Login",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Acumatica Login": {
+      "main": [
+        [
+          {
+            "node": "Wait",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait": {
+      "main": [
+        [
+          {
+            "node": "Acumatica Employee PUT",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Acumatica Employee PUT": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript1": {
+      "main": [
+        [
+          {
+            "node": "Append row in sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Append row in sheet": {
+      "main": [
+        [
+          {
+            "node": "Execute a SQL query1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "84acf6be-668a-4cdf-acc6-fcdac04a5ed3",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "dfa9bd419da97e8a72d6069acb67e95575c89baa71302d0781a7331301986176"
+  },
+  "id": "wEWweH3ZjS1dYtag",
+  "tags": []
+}
