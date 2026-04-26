@@ -1,0 +1,137 @@
+{
+  "name": "assess 20 n8n_mid",
+  "nodes": [
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "id": "2b959a65-faa4-41f4-ac58-a4f1f829f819",
+      "name": "When clicking ‘Execute workflow’"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT\n    LOWER(\n        REGEXP_REPLACE(\n            REGEXP_REPLACE(\n                profile_url,\n                '^https?://(www\\.)?',\n                ''\n            ),\n            '/$',\n            ''\n        )\n    ) AS normalized_url,\n    COUNT(*) AS duplicate_count\nFROM crm_records\nWHERE status = 'new'\nGROUP BY\n    LOWER(\n        REGEXP_REPLACE(\n            REGEXP_REPLACE(\n                profile_url,\n                '^https?://(www\\.)?',\n                ''\n            ),\n            '/$',\n            ''\n        )\n    )\nHAVING COUNT(*) > 1\nORDER BY duplicate_count DESC;",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        352,
+        -336
+      ],
+      "id": "d72d7355-2ccc-4ed2-aadb-30a96133d2d3",
+      "name": "Just to Check Duplicates (SELECT only)",
+      "credentials": {
+        "postgres": {
+          "id": "Pz5LiQSqb8EQE2AD",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "-- Option 2: See full details of duplicate records\nWITH normalized AS (\n    SELECT\n        id,\n        record_id,\n        full_name,\n        email,\n        phone,\n        owner,\n        status,\n        profile_url,\n        -- Normalize URL\n        LOWER(\n            REGEXP_REPLACE(\n                REGEXP_REPLACE(\n                    profile_url,\n                    '^https?://(www\\.)?', ''\n                ),\n                '/$', ''\n            )\n        ) AS normalized_url,\n        created_at\n    FROM crm_records\n    WHERE status = 'new'\n),\nduplicates AS (\n    SELECT normalized_url\n    FROM normalized\n    GROUP BY normalized_url\n    HAVING COUNT(*) > 1\n)\nSELECT\n    n.record_id,\n    n.full_name,\n    n.email,\n    n.owner,\n    n.profile_url,\n    n.normalized_url,\n    n.status,\n    n.created_at,\n    -- Flag which is the original (oldest)\n    ROW_NUMBER() OVER (\n        PARTITION BY n.normalized_url\n        ORDER BY n.created_at ASC\n    ) AS occurrence_order\nFROM normalized n\nINNER JOIN duplicates d\n    ON n.normalized_url = d.normalized_url\nORDER BY n.normalized_url, n.created_at;",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        352,
+        -128
+      ],
+      "id": "06a7f81d-0382-49ca-a9d7-710936298323",
+      "name": "Check Duplicates With Details",
+      "credentials": {
+        "postgres": {
+          "id": "Pz5LiQSqb8EQE2AD",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "-- Option 3: Flag duplicates as Merger_Pending\n-- Updates status of duplicate records (occurrence_order > 1)\nWITH normalized AS (\n    SELECT\n        id,\n        record_id,\n        full_name,\n        owner,\n        profile_url,\n        LOWER(\n            REGEXP_REPLACE(\n                REGEXP_REPLACE(\n                    profile_url,\n                    '^https?://(www\\.)?', ''\n                ),\n                '/$', ''\n            )\n        ) AS normalized_url,\n        created_at\n    FROM crm_records\n    WHERE status = 'new'\n),\nranked AS (\n    SELECT\n        id,\n        record_id,\n        full_name,\n        owner,\n        normalized_url,\n        ROW_NUMBER() OVER (\n            PARTITION BY normalized_url\n            ORDER BY created_at ASC\n        ) AS occurrence_order,\n        -- Get the original record_id for reference\n        FIRST_VALUE(record_id) OVER (\n            PARTITION BY normalized_url\n            ORDER BY created_at ASC\n        ) AS original_record_id\n    FROM normalized\n)\nUPDATE crm_records\nSET\n    status = 'Merger_Pending',\n    duplicate_status = 'duplicate',\n    normalized_url = ranked.normalized_url\nFROM ranked\nWHERE crm_records.id = ranked.id\nAND ranked.occurrence_order > 1\nRETURNING\n    crm_records.record_id,\n    crm_records.full_name,\n    crm_records.status,\n    ranked.original_record_id,\n    ranked.normalized_url;",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        352,
+        112
+      ],
+      "id": "66bceef4-3756-4321-a25c-fc0dbb9ec58e",
+      "name": "Once Verified, Run Update",
+      "credentials": {
+        "postgres": {
+          "id": "Pz5LiQSqb8EQE2AD",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO duplicate_merge_log\n(record_id, duplicate_of, full_name,\n normalized_url, action, result, message)\nVALUES (\n  '{{ $json.record_id }}',\n  '{{ $json.original_record_id }}',\n  '{{ $json.full_name }}',\n  '{{ $json.normalized_url }}',\n  'duplicate_flag',\n  'Merger_Pending',\n  'Flagged as duplicate of {{ $json.original_record_id }}'\n);",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        560,
+        112
+      ],
+      "id": "313f659d-a021-49e4-892e-45c74ca3a6db",
+      "name": "Log",
+      "credentials": {
+        "postgres": {
+          "id": "Pz5LiQSqb8EQE2AD",
+          "name": "Postgres account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "When clicking ‘Execute workflow’": {
+      "main": [
+        [
+          {
+            "node": "Once Verified, Run Update",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Once Verified, Run Update": {
+      "main": [
+        [
+          {
+            "node": "Log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "47a485cf-8660-4272-a643-fa0081f38ef3",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "dfa9bd419da97e8a72d6069acb67e95575c89baa71302d0781a7331301986176"
+  },
+  "id": "MM8kDopDwF2etZ9y",
+  "tags": []
+}
