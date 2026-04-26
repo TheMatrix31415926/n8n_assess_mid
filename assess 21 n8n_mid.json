@@ -1,0 +1,357 @@
+{
+  "name": "assess 21 n8n_mid",
+  "nodes": [
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "id": "aca25484-1b9a-4ab7-ac09-21f5c39531c2",
+      "name": "When clicking ‘Execute workflow’"
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "154pCzO8VvTCRrJCYVNVOGLhmBhRYGLadCBaDVs4faGQ",
+          "mode": "list",
+          "cachedResultName": "Acumatica Certification",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/154pCzO8VvTCRrJCYVNVOGLhmBhRYGLadCBaDVs4faGQ/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Partners Source",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/154pCzO8VvTCRrJCYVNVOGLhmBhRYGLadCBaDVs4faGQ/edit#gid=0"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        208,
+        0
+      ],
+      "id": "ae14e9b2-abd7-4121-b9ba-27673f4509cd",
+      "name": "Get row(s) in sheet",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "p29c8vZBT44DvNDB",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        416,
+        0
+      ],
+      "id": "03fcf8e7-e392-4d22-8aeb-e44474a6774b",
+      "name": "Loop Over Items"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Assess the Acumatica certification level \nfor this partner company:\n\nCompany: {{ $json.company_name }}\nRecord ID: {{ $json.record_id }}\nProfile URL: {{ $json.profile_url }}\nCurrent Cert: {{ $json.current_cert }}\n\nBased on the company name and any available \ninformation, assign the most appropriate \ncertification level.\n\nReturn ONLY this exact JSON:\n{\n  \"record_id\": \"{{ $json.record_id }}\",\n  \"company_name\": \"{{ $json.company_name }}\",\n  \"cert_level\": \"Gold|Silver|Authorized|Unknown|N/A\",\n  \"cert_score\": 85,\n  \"rationale\": \"One clear reason for this level\",\n  \"confidence\": \"High|Medium|Low\"\n}",
+        "options": {
+          "systemMessage": "You are an Acumatica partner certification \nassessment specialist.\n\nCertification levels are:\n- Gold: Top tier partners, 5+ certified staff, \n  10+ implementations, strong revenue\n- Silver: Mid tier, 2-4 certified staff, \n  5-9 implementations, moderate revenue  \n- Authorized: Entry level, 1 certified staff,\n  1-4 implementations, basic requirements met\n- Unknown: Cannot determine from available info\n- N/A: Not applicable, not an Acumatica partner\n\nAlways respond with ONLY raw JSON.\nNo markdown, no backticks, start with {"
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        624,
+        208
+      ],
+      "id": "ef7a06ae-c25f-45e4-a898-e34dab956ed4",
+      "name": "AI Agent"
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "value": "gpt-4o-mini",
+          "mode": "list",
+          "cachedResultName": "gpt-4o-mini"
+        },
+        "builtInTools": {},
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.3,
+      "position": [
+        496,
+        333.1015625
+      ],
+      "id": "80eb7695-f624-4cd7-9c45-89474f88ee56",
+      "name": "OpenAI Chat Model",
+      "credentials": {
+        "openAiApi": {
+          "id": "X6yz5KIllfL8AWsR",
+          "name": "OpenAI account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const item = $input.first();\nconst original = $('Loop Over Items').first().json;\n\n// Get AI output\nlet rawOutput = item.json.output || '';\nlet certData = {};\n\ntry {\n  // Clean markdown if present\n  if (typeof rawOutput === 'string') {\n    rawOutput = rawOutput\n      .replace(/```json/gi, '')\n      .replace(/```/g, '')\n      .trim();\n\n    const start = rawOutput.indexOf('{');\n    const end = rawOutput.lastIndexOf('}');\n\n    if (start !== -1 && end !== -1) {\n      certData = JSON.parse(\n        rawOutput.substring(start, end + 1)\n      );\n    }\n  } else if (typeof rawOutput === 'object') {\n    certData = rawOutput;\n  }\n} catch(e) {\n  return [{\n    json: {\n      record_id: original.record_id,\n      company_name: original.company_name,\n      cert_level: 'Unknown',\n      cert_score: 0,\n      rationale: 'AI parse failed: ' + e.message,\n      error: true,\n      skip: false\n    }\n  }];\n}\n\n// Valid certification levels\nconst validLevels = [\n  'Gold', 'Silver', 'Authorized', 'Unknown', 'N/A'\n];\n\n// Normalize cert level\nlet certLevel = (certData.cert_level || 'Unknown')\n  .trim();\nif (!validLevels.includes(certLevel)) {\n  certLevel = 'Unknown';\n}\n\n// Normalize cert score (0-100)\nlet certScore = parseInt(certData.cert_score) || 0;\nif (certScore > 100) certScore = 100;\nif (certScore < 0) certScore = 0;\n\n// Validate score matches level\n// Override score if doesn't match level\nif (certLevel === 'Gold' && certScore < 80) {\n  certScore = 85;\n}\nif (certLevel === 'Silver' && \n   (certScore < 50 || certScore > 79)) {\n  certScore = 65;\n}\nif (certLevel === 'Authorized' && \n   (certScore < 25 || certScore > 49)) {\n  certScore = 35;\n}\nif (certLevel === 'Unknown') certScore = 0;\nif (certLevel === 'N/A') certScore = 0;\n\n// Normalize confidence\nconst validConfidence = ['High', 'Medium', 'Low'];\nlet confidence = (certData.confidence || 'Medium')\n  .trim();\nif (!validConfidence.includes(confidence)) {\n  confidence = 'Medium';\n}\n\n// Normalize profile URL\nlet profileUrl = (original.profile_url || '').trim();\nif (profileUrl && !profileUrl.startsWith('https://')) {\n  profileUrl = 'https://' + profileUrl;\n}\n\nreturn [{\n  json: {\n    record_id: original.record_id,\n    company_name: certData.company_name || \n                  original.company_name,\n    profile_url: profileUrl,\n    cert_level: certLevel,\n    cert_score: certScore,\n    rationale: (certData.rationale || '')\n                .substring(0, 300),\n    confidence: confidence,\n    previous_cert: original.current_cert || 'Unknown',\n    cert_changed: certLevel !== original.current_cert,\n    error: false,\n    processed_at: new Date().toISOString()\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        976,
+        208
+      ],
+      "id": "26affe92-57ae-43f3-941b-ef85a0da483e",
+      "name": "Code in JavaScript"
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "154pCzO8VvTCRrJCYVNVOGLhmBhRYGLadCBaDVs4faGQ",
+          "mode": "list",
+          "cachedResultName": "Acumatica Certification",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/154pCzO8VvTCRrJCYVNVOGLhmBhRYGLadCBaDVs4faGQ/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": 1094786007,
+          "mode": "list",
+          "cachedResultName": "Sheet2",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/154pCzO8VvTCRrJCYVNVOGLhmBhRYGLadCBaDVs4faGQ/edit#gid=1094786007"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "record_id": "={{ $json.record_id }}",
+            "company_name": "={{ $json.company_name }}",
+            "cert_level": "={{ $json.cert_level }}",
+            "score": "={{ $json.cert_score }}",
+            "rationale": "={{ $json.rationale }}",
+            "timestamp": "={{ $json.processed_at }}",
+            "status": "={{ $json.cert_changed }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "record_id",
+              "displayName": "record_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "company_name",
+              "displayName": "company_name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "cert_level",
+              "displayName": "cert_level",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "score",
+              "displayName": "score",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "rationale",
+              "displayName": "rationale",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "status",
+              "displayName": "status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "timestamp",
+              "displayName": "timestamp",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        1184,
+        208
+      ],
+      "id": "ae4c9b77-a959-4835-adf7-c4b8c30831f6",
+      "name": "Append row in sheet",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "p29c8vZBT44DvNDB",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE acumatica_partners\nSET assigned_cert = '{{ $json.cert_level }}',\n    cert_score ={{ $('Code in JavaScript').item.json.cert_score }} ,\n    status = 'processed',\n    processed = TRUE\nWHERE record_id = '{{ $json.record_id }}';\n\n\nINSERT INTO cert_log\n(record_id, company_name, from_cert,\n to_cert, cert_score, action, result, message)\nVALUES (\n  '{{ $json.record_id }}',\n  '{{ $json.company_name }}',\n  '{{ $('Code in JavaScript').item.json.previous_cert }}',\n  '{{ $json.cert_level }}',\n  {{ $('Code in JavaScript').item.json.cert_score }},\n  'cert_assessment',\n  'success',\n  'Confidence: {{ $json.confidence }} | Changed: {{ $json.cert_changed }}'\n);",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        1456,
+        240
+      ],
+      "id": "7a016dd1-2ed7-4e38-a88b-112903384b59",
+      "name": "Execute a SQL query",
+      "credentials": {
+        "postgres": {
+          "id": "Pz5LiQSqb8EQE2AD",
+          "name": "Postgres account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "When clicking ‘Execute workflow’": {
+      "main": [
+        [
+          {
+            "node": "Get row(s) in sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get row(s) in sheet": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Loop Over Items": {
+      "main": [
+        [],
+        [
+          {
+            "node": "AI Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Agent": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript": {
+      "main": [
+        [
+          {
+            "node": "Append row in sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Append row in sheet": {
+      "main": [
+        [
+          {
+            "node": "Execute a SQL query",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute a SQL query": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "2e6b1351-a57c-4c73-bb0f-af457b0f565f",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "dfa9bd419da97e8a72d6069acb67e95575c89baa71302d0781a7331301986176"
+  },
+  "id": "dKTSkOTvbg6n4TcJ",
+  "tags": []
+}
